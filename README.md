@@ -31,6 +31,8 @@ VIP5_Shadowcast_DPA 是一个面向多模态推荐系统 VIP5 的数据层数据
 
 ## Project Structure
 
+
+```plaintext
 VIP5_Shadowcast_DPA/
 ├── analysis/                     # 分析脚本及结果存放目录
 │   ├── analyze_popularity.py    # 物品流行度分析脚本
@@ -51,6 +53,8 @@ VIP5_Shadowcast_DPA/
 ├── README.md                    # 本文件
 ├── requirements.txt             # Python 依赖列表
 └── (其他目录和文件被 .gitignore 忽略，如 data/, snap/, features/, photos/, log/, transformers/ 等)
+```
+
 
 
 
