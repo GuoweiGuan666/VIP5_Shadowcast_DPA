@@ -1,0 +1,2 @@
+from adapters.adapter_configuration import AdapterConfig
+print(AdapterConfig)

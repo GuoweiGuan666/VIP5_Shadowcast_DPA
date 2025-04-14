@@ -1,0 +1,16 @@
+[INFO] 数据集目录：data/sports
+[INFO] 读取交互序列文件：data/sports/sequential_data.txt
+[INFO] 加载到 35598 行交互数据。
+[INFO] 统计到 18357 个不同物品的交互记录。
+[INFO] 统计指标：
+    min: 5
+    max: 1042
+    mean: 16.142997221768262
+    median: 9.0
+    25th_percentile: 6.0
+    75th_percentile: 16.0
+[INFO] 直方图已保存至 analysis/results/sports/popularity_sports_lowcount_1.png
+[INFO] 选取计数最低的 1 个物品，最低计数阈值为 5
+[INFO] 低流行度候选目标物品：
+    Item: B0000C52L6 (ID: 53), Count: 5
+[INFO] 低流行度候选目标物品信息已保存至 analysis/results/sports/low_pop_items_sports_lowcount_1.txt

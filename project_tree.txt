@@ -1,0 +1,848 @@
+/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA
+├── .git
+│   ├── COMMIT_EDITMSG
+│   ├── FETCH_HEAD
+│   ├── HEAD
+│   ├── ORIG_HEAD
+│   ├── branches
+│   ├── config
+│   ├── description
+│   ├── hooks
+│   │   ├── applypatch-msg.sample
+│   │   ├── commit-msg.sample
+│   │   ├── fsmonitor-watchman.sample
+│   │   ├── post-update.sample
+│   │   ├── pre-applypatch.sample
+│   │   ├── pre-commit.sample
+│   │   ├── pre-merge-commit.sample
+│   │   ├── pre-push.sample
+│   │   ├── pre-rebase.sample
+│   │   ├── pre-receive.sample
+│   │   └── ... (and 3 more)
+│   ├── index
+│   ├── info
+│   │   ├── exclude
+│   │   └── refs
+│   └── ... (and 5 more)
+├── .gitignore
+├── .pytest_cache
+│   ├── .gitignore
+│   ├── CACHEDIR.TAG
+│   ├── README.md
+│   └── v
+│       └── cache
+│           ├── lastfailed
+│           ├── nodeids
+│           └── stepwise
+├── DPA_cmd.txt
+├── LICENSE
+├── Project_start_date.txt
+├── README.md
+├── analysis
+│   ├── analyze_popularity.py
+│   └── results
+│       ├── beauty
+│       │   ├── low_pop_items_beauty_lowcount_1.txt
+│       │   ├── popularity_beauty_lowcount_1.png
+│       │   └── popularity_log_beauty.txt
+│       ├── clothing
+│       │   ├── low_pop_items_clothing_lowcount_1.txt
+│       │   ├── popularity_clothing_lowcount_1.png
+│       │   └── popularity_log_clothing.txt
+│       ├── sports
+│       │   ├── low_pop_items_sports_lowcount_1.txt
+│       │   ├── popularity_log_sports.txt
+│       │   └── popularity_sports_lowcount_1.png
+│       └── toys
+│           ├── low_pop_items_toys_lowcount_1.txt
+│           ├── popularity_log_toys.txt
+│           └── popularity_toys_lowcount_1.png
+├── data
+│   ├── beauty
+│   │   ├── datamaps.json
+│   │   ├── exp_splits.pkl
+│   │   ├── item2img_dict.pkl
+│   │   ├── meta.json.gz
+│   │   ├── negative_samples.txt
+│   │   ├── rating_splits_augmented.pkl
+│   │   ├── review_splits.pkl
+│   │   ├── sequential_data.txt
+│   │   ├── user_id2name.pkl
+│   │   └── user_item_pairs_dict.pkl
+│   ├── clothing
+│   │   ├── datamaps.json
+│   │   ├── exp_splits.pkl
+│   │   ├── item2img_dict.pkl
+│   │   ├── meta.json.gz
+│   │   ├── negative_samples.txt
+│   │   ├── rating_splits_augmented.pkl
+│   │   ├── review_splits.pkl
+│   │   ├── sequential_data.txt
+│   │   ├── user_id2name.pkl
+│   │   └── user_item_pairs_dict.pkl
+│   ├── sports
+│   │   ├── datamaps.json
+│   │   ├── exp_splits.pkl
+│   │   ├── item2img_dict.pkl
+│   │   ├── meta.json.gz
+│   │   ├── negative_samples.txt
+│   │   ├── rating_splits_augmented.pkl
+│   │   ├── review_splits.pkl
+│   │   ├── sequential_data.txt
+│   │   ├── user_id2name.pkl
+│   │   └── user_item_pairs_dict.pkl
+│   ├── toys
+│   │   ├── datamaps.json
+│   │   ├── exp_splits.pkl
+│   │   ├── item2img_dict.pkl
+│   │   ├── meta.json.gz
+│   │   ├── negative_samples.txt
+│   │   ├── rating_splits_augmented.pkl
+│   │   ├── review_splits.pkl
+│   │   ├── sequential_data.txt
+│   │   ├── user_id2name.pkl
+│   │   └── user_item_pairs_dict.pkl
+│   └── vip5_data.zip
+├── env_setup.txt
+├── features
+│   ├── rn101_features
+│   │   ├── beauty
+│   │   │   ├── 7806397051.npy
+│   │   │   ├── 9759091062.npy
+│   │   │   ├── 9788072216.npy
+│   │   │   ├── 9790790961.npy
+│   │   │   ├── 9790794231.npy
+│   │   │   ├── B00004TMFE.npy
+│   │   │   ├── B00004TUBL.npy
+│   │   │   ├── B00004TUBV.npy
+│   │   │   ├── B00004U9UY.npy
+│   │   │   ├── B00004U9V2.npy
+│   │   │   └── ... (and 12091 more)
+│   │   ├── clothing
+│   │   │   ├── 0000031887.npy
+│   │   │   ├── 0123456479.npy
+│   │   │   ├── 1608299953.npy
+│   │   │   ├── 1617160377.npy
+│   │   │   ├── B00001W0KA.npy
+│   │   │   ├── B00001WRHJ.npy
+│   │   │   ├── B00004SR8W.npy
+│   │   │   ├── B00004SR8Z.npy
+│   │   │   ├── B00004SR9P.npy
+│   │   │   ├── B00004U1J2.npy
+│   │   │   └── ... (and 23023 more)
+│   │   ├── sports
+│   │   │   ├── 1881509818.npy
+│   │   │   ├── 2094869245.npy
+│   │   │   ├── 7245456259.npy
+│   │   │   ├── 7245456313.npy
+│   │   │   ├── B000002NUS.npy
+│   │   │   ├── B00000ELZ5.npy
+│   │   │   ├── B00000IURU.npy
+│   │   │   ├── B00000IUX5.npy
+│   │   │   ├── B00000J6JO.npy
+│   │   │   ├── B0000224UE.npy
+│   │   │   └── ... (and 18347 more)
+│   │   └── toys
+│   │       ├── 0439893577.npy
+│   │       ├── 048645195X.npy
+│   │       ├── 0545496470.npy
+│   │       ├── 0615444172.npy
+│   │       ├── 0670010936.npy
+│   │       ├── 0735308365.npy
+│   │       ├── 0735321396.npy
+│   │       ├── 073533305X.npy
+│   │       ├── 0735333483.npy
+│   │       ├── 073533417X.npy
+│   │       └── ... (and 11914 more)
+│   ├── rn101_features.zip
+│   ├── rn50_features
+│   │   ├── beauty
+│   │   │   ├── 7806397051.npy
+│   │   │   ├── 9759091062.npy
+│   │   │   ├── 9788072216.npy
+│   │   │   ├── 9790790961.npy
+│   │   │   ├── 9790794231.npy
+│   │   │   ├── B00004TMFE.npy
+│   │   │   ├── B00004TUBL.npy
+│   │   │   ├── B00004TUBV.npy
+│   │   │   ├── B00004U9UY.npy
+│   │   │   ├── B00004U9V2.npy
+│   │   │   └── ... (and 12091 more)
+│   │   ├── clothing
+│   │   │   ├── 0000031887.npy
+│   │   │   ├── 0123456479.npy
+│   │   │   ├── 1608299953.npy
+│   │   │   ├── 1617160377.npy
+│   │   │   ├── B00001W0KA.npy
+│   │   │   ├── B00001WRHJ.npy
+│   │   │   ├── B00004SR8W.npy
+│   │   │   ├── B00004SR8Z.npy
+│   │   │   ├── B00004SR9P.npy
+│   │   │   ├── B00004U1J2.npy
+│   │   │   └── ... (and 23023 more)
+│   │   ├── sports
+│   │   │   ├── 1881509818.npy
+│   │   │   ├── 2094869245.npy
+│   │   │   ├── 7245456259.npy
+│   │   │   ├── 7245456313.npy
+│   │   │   ├── B000002NUS.npy
+│   │   │   ├── B00000ELZ5.npy
+│   │   │   ├── B00000IURU.npy
+│   │   │   ├── B00000IUX5.npy
+│   │   │   ├── B00000J6JO.npy
+│   │   │   ├── B0000224UE.npy
+│   │   │   └── ... (and 18347 more)
+│   │   └── toys
+│   │       ├── 0439893577.npy
+│   │       ├── 048645195X.npy
+│   │       ├── 0545496470.npy
+│   │       ├── 0615444172.npy
+│   │       ├── 0670010936.npy
+│   │       ├── 0735308365.npy
+│   │       ├── 0735321396.npy
+│   │       ├── 073533305X.npy
+│   │       ├── 0735333483.npy
+│   │       ├── 073533417X.npy
+│   │       └── ... (and 11914 more)
+│   ├── rn50_features.zip
+│   ├── vitb16_features
+│   │   ├── beauty
+│   │   │   ├── 7806397051.npy
+│   │   │   ├── 9759091062.npy
+│   │   │   ├── 9788072216.npy
+│   │   │   ├── 9790790961.npy
+│   │   │   ├── 9790794231.npy
+│   │   │   ├── B00004TMFE.npy
+│   │   │   ├── B00004TUBL.npy
+│   │   │   ├── B00004TUBV.npy
+│   │   │   ├── B00004U9UY.npy
+│   │   │   ├── B00004U9V2.npy
+│   │   │   └── ... (and 12091 more)
+│   │   ├── clothing
+│   │   │   ├── 0000031887.npy
+│   │   │   ├── 0123456479.npy
+│   │   │   ├── 1608299953.npy
+│   │   │   ├── 1617160377.npy
+│   │   │   ├── B00001W0KA.npy
+│   │   │   ├── B00001WRHJ.npy
+│   │   │   ├── B00004SR8W.npy
+│   │   │   ├── B00004SR8Z.npy
+│   │   │   ├── B00004SR9P.npy
+│   │   │   ├── B00004U1J2.npy
+│   │   │   └── ... (and 23023 more)
+│   │   ├── sports
+│   │   │   ├── 1881509818.npy
+│   │   │   ├── 2094869245.npy
+│   │   │   ├── 7245456259.npy
+│   │   │   ├── 7245456313.npy
+│   │   │   ├── B000002NUS.npy
+│   │   │   ├── B00000ELZ5.npy
+│   │   │   ├── B00000IURU.npy
+│   │   │   ├── B00000IUX5.npy
+│   │   │   ├── B00000J6JO.npy
+│   │   │   ├── B0000224UE.npy
+│   │   │   └── ... (and 18347 more)
+│   │   └── toys
+│   │       ├── 0439893577.npy
+│   │       ├── 048645195X.npy
+│   │       ├── 0545496470.npy
+│   │       ├── 0615444172.npy
+│   │       ├── 0670010936.npy
+│   │       ├── 0735308365.npy
+│   │       ├── 0735321396.npy
+│   │       ├── 073533305X.npy
+│   │       ├── 0735333483.npy
+│   │       ├── 073533417X.npy
+│   │       └── ... (and 11914 more)
+│   ├── vitb16_features.zip
+│   ├── vitb32_features
+│   │   ├── beauty
+│   │   │   ├── 7806397051.npy
+│   │   │   ├── 9759091062.npy
+│   │   │   ├── 9788072216.npy
+│   │   │   ├── 9790790961.npy
+│   │   │   ├── 9790794231.npy
+│   │   │   ├── B00004TMFE.npy
+│   │   │   ├── B00004TUBL.npy
+│   │   │   ├── B00004TUBV.npy
+│   │   │   ├── B00004U9UY.npy
+│   │   │   ├── B00004U9V2.npy
+│   │   │   └── ... (and 12091 more)
+│   │   ├── clothing
+│   │   │   ├── 0000031887.npy
+│   │   │   ├── 0123456479.npy
+│   │   │   ├── 1608299953.npy
+│   │   │   ├── 1617160377.npy
+│   │   │   ├── B00001W0KA.npy
+│   │   │   ├── B00001WRHJ.npy
+│   │   │   ├── B00004SR8W.npy
+│   │   │   ├── B00004SR8Z.npy
+│   │   │   ├── B00004SR9P.npy
+│   │   │   ├── B00004U1J2.npy
+│   │   │   └── ... (and 23023 more)
+│   │   ├── sports
+│   │   │   ├── 1881509818.npy
+│   │   │   ├── 2094869245.npy
+│   │   │   ├── 7245456259.npy
+│   │   │   ├── 7245456313.npy
+│   │   │   ├── B000002NUS.npy
+│   │   │   ├── B00000ELZ5.npy
+│   │   │   ├── B00000IURU.npy
+│   │   │   ├── B00000IUX5.npy
+│   │   │   ├── B00000J6JO.npy
+│   │   │   ├── B0000224UE.npy
+│   │   │   └── ... (and 18347 more)
+│   │   └── toys
+│   │       ├── 0439893577.npy
+│   │       ├── 048645195X.npy
+│   │       ├── 0545496470.npy
+│   │       ├── 0615444172.npy
+│   │       ├── 0670010936.npy
+│   │       ├── 0735308365.npy
+│   │       ├── 0735321396.npy
+│   │       ├── 073533305X.npy
+│   │       ├── 0735333483.npy
+│   │       ├── 073533417X.npy
+│   │       └── ... (and 11914 more)
+│   ├── vitb32_features.zip
+│   ├── vitl14_features
+│   │   ├── beauty
+│   │   │   ├── 7806397051.npy
+│   │   │   ├── 9759091062.npy
+│   │   │   ├── 9788072216.npy
+│   │   │   ├── 9790790961.npy
+│   │   │   ├── 9790794231.npy
+│   │   │   ├── B00004TMFE.npy
+│   │   │   ├── B00004TUBL.npy
+│   │   │   ├── B00004TUBV.npy
+│   │   │   ├── B00004U9UY.npy
+│   │   │   ├── B00004U9V2.npy
+│   │   │   └── ... (and 12091 more)
+│   │   ├── clothing
+│   │   │   ├── 0000031887.npy
+│   │   │   ├── 0123456479.npy
+│   │   │   ├── 1608299953.npy
+│   │   │   ├── 1617160377.npy
+│   │   │   ├── B00001W0KA.npy
+│   │   │   ├── B00001WRHJ.npy
+│   │   │   ├── B00004SR8W.npy
+│   │   │   ├── B00004SR8Z.npy
+│   │   │   ├── B00004SR9P.npy
+│   │   │   ├── B00004U1J2.npy
+│   │   │   └── ... (and 23023 more)
+│   │   ├── sports
+│   │   │   ├── 1881509818.npy
+│   │   │   ├── 2094869245.npy
+│   │   │   ├── 7245456259.npy
+│   │   │   ├── 7245456313.npy
+│   │   │   ├── B000002NUS.npy
+│   │   │   ├── B00000ELZ5.npy
+│   │   │   ├── B00000IURU.npy
+│   │   │   ├── B00000IUX5.npy
+│   │   │   ├── B00000J6JO.npy
+│   │   │   ├── B0000224UE.npy
+│   │   │   └── ... (and 18347 more)
+│   │   └── toys
+│   │       ├── 0439893577.npy
+│   │       ├── 048645195X.npy
+│   │       ├── 0545496470.npy
+│   │       ├── 0615444172.npy
+│   │       ├── 0670010936.npy
+│   │       ├── 0735308365.npy
+│   │       ├── 0735321396.npy
+│   │       ├── 073533305X.npy
+│   │       ├── 0735333483.npy
+│   │       ├── 073533417X.npy
+│   │       └── ... (and 11914 more)
+│   └── vitl14_features.zip
+├── figure
+│   └── vip5_teaser.png
+├── log
+│   ├── beauty
+│   │   ├── 0305
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── beauty-vitb32-2-8-20.log
+│   │   │       └── beauty-vitb32-2-8-20_nohup.out
+│   │   ├── 0306
+│   │   │   ├── evaluation_logs
+│   │   │   │   └── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── beauty-vitb32-2-8-20.log
+│   │   │       └── beauty-vitb32-2-8-20_nohup.out
+│   │   └── 0410
+│   │       ├── evaluation_logs
+│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-5.txt
+│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-8.txt
+│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-3.txt
+│   │       │   └── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │       └── fine_tuning_logs
+│   │           ├── beauty-vitb32-2-8-20-NoAttack.log
+│   │           └── beauty-vitb32-2-8-20-NoAttack_nohup.out
+│   ├── clothing
+│   │   ├── 0410
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── clothing-vitb32-2-8-20-NoAttack.log
+│   │   │       └── clothing-vitb32-2-8-20-NoAttack_nohup.out
+│   │   └── 0411
+│   │       ├── evaluation_logs
+│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-5.txt
+│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-8.txt
+│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │       │   └── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │       └── fine_tuning_logs
+│   │           ├── clothing-vitb32-2-8-20-NoAttack.log
+│   │           └── clothing-vitb32-2-8-20-NoAttack_nohup.out
+│   ├── sports
+│   │   ├── 0304
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── sports-vitb32-2-8-20.log
+│   │   │       └── sports-vitb32-2-8-20_nohup.out
+│   │   ├── 0307
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── sports-vitb32-2-8-20.log
+│   │   │       └── sports-vitb32-2-8-20_nohup.out
+│   │   └── 0412
+│   │       └── fine_tuning_logs
+│   │           ├── sports-vitb32-2-8-20-NoAttack.log
+│   │           └── sports-vitb32-2-8-20-NoAttack_nohup.out
+│   └── toys
+│       ├── 0304
+│       │   ├── evaluation_logs
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-5.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_sequential_A-9.txt
+│       │   └── fine_tuning_logs
+│       │       └── toys-vitb32-2-8-20.log
+│       ├── 0305
+│       │   └── evaluation_logs
+│       │       ├── VIP5_toys_vitb32_8_20_evaluation_direct.txt
+│       │       ├── VIP5_toys_vitb32_8_20_evaluation_explanation.txt
+│       │       └── VIP5_toys_vitb32_8_20_evaluation_sequential.txt
+│       ├── 0306
+│       │   └── evaluation_logs
+│       │       ├── VIP5_toys_vitb32_8_20_evaluation_direct.txt
+│       │       ├── VIP5_toys_vitb32_8_20_evaluation_explanation.txt
+│       │       └── VIP5_toys_vitb32_8_20_evaluation_sequential.txt
+│       └── 0413
+│           └── fine_tuning_logs
+│               ├── toys-vitb32-2-8-20-NoAttack.log
+│               └── toys-vitb32-2-8-20-NoAttack_nohup.out
+├── notebooks
+│   ├── .ipynb_checkpoints
+│   │   ├── all_templates-checkpoint.py
+│   │   └── evaluate_VIP5-checkpoint.ipynb
+│   ├── __pycache__
+│   │   ├── all_templates.cpython-39.pyc
+│   │   ├── modeling_vip5.cpython-39.pyc
+│   │   ├── tokenization.cpython-39.pyc
+│   │   └── utils.cpython-39.pyc
+│   ├── adapters
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-39.pyc
+│   │   │   ├── adapter_configuration.cpython-39.pyc
+│   │   │   ├── adapter_controller.cpython-39.pyc
+│   │   │   ├── adapter_hypernetwork.cpython-39.pyc
+│   │   │   ├── adapter_modeling.cpython-39.pyc
+│   │   │   ├── adapter_outputs.cpython-39.pyc
+│   │   │   ├── adapter_utils.cpython-39.pyc
+│   │   │   ├── config.cpython-39.pyc
+│   │   │   └── low_rank_layer.cpython-39.pyc
+│   │   ├── adapter_configuration.py
+│   │   ├── adapter_controller.py
+│   │   ├── adapter_hypernetwork.py
+│   │   ├── adapter_modeling.py
+│   │   ├── adapter_outputs.py
+│   │   ├── adapter_utils.py
+│   │   ├── config.py
+│   │   ├── hypercomplex
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-39.pyc
+│   │   │   │   ├── inits.cpython-39.pyc
+│   │   │   │   ├── kronecker.cpython-39.pyc
+│   │   │   │   └── layers.cpython-39.pyc
+│   │   │   ├── inits.py
+│   │   │   ├── kronecker.py
+│   │   │   └── layers.py
+│   │   └── ... (and 1 more)
+│   ├── all_templates.py
+│   ├── evaluate
+│   │   ├── __pycache__
+│   │   │   ├── bleu.cpython-39.pyc
+│   │   │   ├── metrics4rec.cpython-39.pyc
+│   │   │   ├── rouge.cpython-39.pyc
+│   │   │   └── utils.cpython-39.pyc
+│   │   ├── bleu.py
+│   │   ├── metrics4rec.py
+│   │   ├── rouge.py
+│   │   └── utils.py
+│   ├── evaluate_VIP5.ipynb
+│   ├── evaluate_VIP5_0107.ipynb
+│   ├── evaluate_VIP5_final.ipynb
+│   ├── evaluate_VIP5_origin.ipynb
+│   ├── modeling_vip5.py
+│   └── ... (and 6 more)
+├── notebooks_origin
+│   ├── __pycache__
+│   │   └── modeling_vip5.cpython-39.pyc
+│   ├── adapters
+│   │   ├── __init__.py
+│   │   ├── adapter_configuration.py
+│   │   ├── adapter_controller.py
+│   │   ├── adapter_hypernetwork.py
+│   │   ├── adapter_modeling.py
+│   │   ├── adapter_outputs.py
+│   │   ├── adapter_utils.py
+│   │   ├── config.py
+│   │   ├── hypercomplex
+│   │   │   ├── __init__.py
+│   │   │   ├── inits.py
+│   │   │   ├── kronecker.py
+│   │   │   └── layers.py
+│   │   └── low_rank_layer.py
+│   ├── all_templates.py
+│   ├── evaluate
+│   │   ├── bleu.py
+│   │   ├── metrics4rec.py
+│   │   ├── rouge.py
+│   │   └── utils.py
+│   ├── evaluate_VIP5.ipynb
+│   ├── modeling_vip5.py
+│   ├── tokenization.py
+│   └── utils.py
+├── notebooks_working
+│   ├── .ipynb_checkpoints
+│   │   ├── all_templates-checkpoint.py
+│   │   └── evaluate_VIP5-checkpoint.ipynb
+│   ├── __pycache__
+│   │   ├── all_templates.cpython-39.pyc
+│   │   ├── modeling_vip5.cpython-39.pyc
+│   │   ├── tokenization.cpython-39.pyc
+│   │   └── utils.cpython-39.pyc
+│   ├── adapters
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-39.pyc
+│   │   │   ├── adapter_configuration.cpython-39.pyc
+│   │   │   ├── adapter_controller.cpython-39.pyc
+│   │   │   ├── adapter_hypernetwork.cpython-39.pyc
+│   │   │   ├── adapter_modeling.cpython-39.pyc
+│   │   │   ├── adapter_outputs.cpython-39.pyc
+│   │   │   ├── adapter_utils.cpython-39.pyc
+│   │   │   ├── config.cpython-39.pyc
+│   │   │   └── low_rank_layer.cpython-39.pyc
+│   │   ├── adapter_configuration.py
+│   │   ├── adapter_controller.py
+│   │   ├── adapter_hypernetwork.py
+│   │   ├── adapter_modeling.py
+│   │   ├── adapter_outputs.py
+│   │   ├── adapter_utils.py
+│   │   ├── config.py
+│   │   ├── hypercomplex
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-39.pyc
+│   │   │   │   ├── inits.cpython-39.pyc
+│   │   │   │   ├── kronecker.cpython-39.pyc
+│   │   │   │   └── layers.cpython-39.pyc
+│   │   │   ├── inits.py
+│   │   │   ├── kronecker.py
+│   │   │   └── layers.py
+│   │   └── ... (and 1 more)
+│   ├── all_templates.py
+│   ├── evaluate
+│   │   ├── __pycache__
+│   │   │   ├── bleu.cpython-39.pyc
+│   │   │   ├── metrics4rec.cpython-39.pyc
+│   │   │   ├── rouge.cpython-39.pyc
+│   │   │   └── utils.cpython-39.pyc
+│   │   ├── bleu.py
+│   │   ├── metrics4rec.py
+│   │   ├── rouge.py
+│   │   └── utils.py
+│   ├── evaluate_VIP5.ipynb
+│   ├── evaluate_VIP5_0107.ipynb
+│   ├── evaluate_VIP5_working.ipynb
+│   ├── modeling_vip5.py
+│   ├── modeling_vip5_backup.py
+│   └── ... (and 5 more)
+├── photos
+│   ├── beauty
+│   │   ├── 01mSuFCZ29L.jpg
+│   │   ├── 01ugGgWA7nL.jpg
+│   │   ├── 11%2BOsSlZSvL.jpg
+│   │   ├── 1104C18YZmL.jpg
+│   │   ├── 1115al4EckL.jpg
+│   │   ├── 111rxJ54JlL.jpg
+│   │   ├── 112YQX77Q9L.jpg
+│   │   ├── 113W02Kc7eL.jpg
+│   │   ├── 113ZEaEMn9L.jpg
+│   │   ├── 11404ILxMPL.jpg
+│   │   └── ... (and 12014 more)
+│   ├── clothing
+│   │   ├── 0724_SPEND_RECIEVE_CSW_HQP._SS75_V347521248_.jpg
+│   │   ├── 11Gtu9cVM7L.jpg
+│   │   ├── 11IF-HICFnL.jpg
+│   │   ├── 11RuIKU7iJL.jpg
+│   │   ├── 11Y16K5S8XL._SX300_.jpg
+│   │   ├── 11dmeUVtNxL.jpg
+│   │   ├── 11p0eWivLcL.jpg
+│   │   ├── 11xEbWqgZxL.jpg
+│   │   ├── 21%2B9s4ks4wL._SY445_.jpg
+│   │   ├── 21%2BArs3qPIL._SY445_.jpg
+│   │   └── ... (and 22290 more)
+│   ├── sports
+│   │   ├── 01WXPENY0HL.jpg
+│   │   ├── 01rIQWdVFpL.jpg
+│   │   ├── 11%2BkrjpCwoL._SX300_.jpg
+│   │   ├── 11046KrMBML._SX300_.jpg
+│   │   ├── 110utPruRCL.jpg
+│   │   ├── 113K4J08TJL._SX300_.jpg
+│   │   ├── 113a-nQ7AaL.jpg
+│   │   ├── 114LdWhtGTL.jpg
+│   │   ├── 114N9N3EJ4L.jpg
+│   │   ├── 114y5FgUWLL.jpg
+│   │   └── ... (and 17934 more)
+│   ├── toys
+│   │   ├── 11DV8a%2B6I2L._SX300_.jpg
+│   │   ├── 11ICvwFUzCL.jpg
+│   │   ├── 11RMe74MCYL.jpg
+│   │   ├── 11fO2lrhH2L.jpg
+│   │   ├── 11tB1fOKXQL.jpg
+│   │   ├── 21-IREZJroL._SX300_.jpg
+│   │   ├── 21-YnkqnUaL.jpg
+│   │   ├── 212H8CJRTJL.jpg
+│   │   ├── 213B9RF35XL.jpg
+│   │   ├── 214Sg98qWuL._SY300_.jpg
+│   │   └── ... (and 11886 more)
+│   └── vip5_photos.zip
+├── pip_list.txt
+├── project_code_extracted.txt
+├── project_code_extractor.py
+├── project_tree.txt
+├── project_tree_generator.py
+├── requirements.txt
+├── scripts
+│   ├── train_VIP5.sh
+│   ├── train_VIP5_0303_backup.sh
+│   ├── train_VIP5_0410_backup.sh
+│   └── train_VIP5_origin.sh
+├── snap
+│   ├── beauty
+│   │   ├── 0305
+│   │   │   └── beauty-vitb32-2-8-20
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       └── Epoch04.pth
+│   │   ├── 0306
+│   │   │   └── beauty-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   └── 0410
+│   │       └── beauty-vitb32-2-8-20-NoAttack
+│   │           ├── BEST_EVAL_LOSS.pth
+│   │           ├── Epoch00.pth
+│   │           ├── Epoch01.pth
+│   │           ├── Epoch02.pth
+│   │           ├── Epoch03.pth
+│   │           ├── Epoch04.pth
+│   │           ├── Epoch05.pth
+│   │           ├── Epoch06.pth
+│   │           ├── Epoch07.pth
+│   │           ├── Epoch08.pth
+│   │           └── ... (and 11 more)
+│   ├── clothing
+│   │   ├── 0410
+│   │   │   └── clothing-vitb32-2-8-20-NoAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 7 more)
+│   │   └── 0411
+│   │       └── clothing-vitb32-2-8-20-NoAttack
+│   │           ├── BEST_EVAL_LOSS.pth
+│   │           ├── Epoch00.pth
+│   │           ├── Epoch01.pth
+│   │           ├── Epoch02.pth
+│   │           ├── Epoch03.pth
+│   │           ├── Epoch04.pth
+│   │           ├── Epoch05.pth
+│   │           ├── Epoch06.pth
+│   │           ├── Epoch07.pth
+│   │           ├── Epoch08.pth
+│   │           └── ... (and 11 more)
+│   ├── sports
+│   │   ├── 0304
+│   │   │   └── sports-vitb32-2-8-20
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       └── Epoch04.pth
+│   │   ├── 0307
+│   │   │   └── sports-vitb32-2-8-20
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       └── Epoch04.pth
+│   │   └── 0412
+│   │       └── sports-vitb32-2-8-20-NoAttack
+│   │           ├── BEST_EVAL_LOSS.pth
+│   │           ├── Epoch00.pth
+│   │           ├── Epoch01.pth
+│   │           ├── Epoch02.pth
+│   │           ├── Epoch03.pth
+│   │           ├── Epoch04.pth
+│   │           ├── Epoch05.pth
+│   │           ├── Epoch06.pth
+│   │           ├── Epoch07.pth
+│   │           ├── Epoch08.pth
+│   │           └── ... (and 11 more)
+│   └── toys
+│       └── 0413
+│           └── toys-vitb32-2-8-20-NoAttack
+│               ├── Epoch00.pth
+│               └── Epoch01.pth
+├── src
+│   ├── __pycache__
+│   │   ├── all_templates.cpython-39.pyc
+│   │   ├── data.cpython-39.pyc
+│   │   ├── dist_utils.cpython-39.pyc
+│   │   ├── model.cpython-39.pyc
+│   │   ├── modeling_vip5.cpython-39.pyc
+│   │   ├── param.cpython-39.pyc
+│   │   ├── tokenization.cpython-39.pyc
+│   │   ├── trainer_base.cpython-39.pyc
+│   │   └── utils.cpython-39.pyc
+│   ├── adapters
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-39.pyc
+│   │   │   ├── adapter_controller.cpython-39.pyc
+│   │   │   ├── adapter_hypernetwork.cpython-39.pyc
+│   │   │   ├── adapter_modeling.cpython-39.pyc
+│   │   │   ├── adapter_outputs.cpython-39.pyc
+│   │   │   ├── adapter_utils.cpython-39.pyc
+│   │   │   ├── config.cpython-39.pyc
+│   │   │   └── low_rank_layer.cpython-39.pyc
+│   │   ├── adapter_configuration.py
+│   │   ├── adapter_controller.py
+│   │   ├── adapter_hypernetwork.py
+│   │   ├── adapter_modeling.py
+│   │   ├── adapter_outputs.py
+│   │   ├── adapter_utils.py
+│   │   ├── config.py
+│   │   ├── hypercomplex
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-39.pyc
+│   │   │   │   ├── inits.cpython-39.pyc
+│   │   │   │   ├── kronecker.cpython-39.pyc
+│   │   │   │   └── layers.cpython-39.pyc
+│   │   │   ├── inits.py
+│   │   │   ├── kronecker.py
+│   │   │   └── layers.py
+│   │   └── ... (and 1 more)
+│   ├── all_templates.py
+│   ├── data.py
+│   ├── data_0104_backup.py
+│   ├── data_0410_backup.py
+│   ├── dist_utils.py
+│   ├── model.py
+│   ├── modeling_vip5.py
+│   ├── param.py
+│   └── ... (and 9 more)
+├── train_vip5_beauty_rn101_2_8_5.log
+├── train_vip5_clothing_rn50_2_8_20.log
+├── train_vip5_clothing_vitb16_2_8_20.log
+├── train_vip5_sports_vitb16_2_8_20.log
+└── transformers
+    ├── .circleci
+    │   ├── TROUBLESHOOT.md
+    │   └── config.yml
+    ├── .coveragerc
+    ├── .git
+    │   ├── HEAD
+    │   ├── branches
+    │   ├── config
+    │   ├── description
+    │   ├── hooks
+    │   │   ├── applypatch-msg.sample
+    │   │   ├── commit-msg.sample
+    │   │   ├── fsmonitor-watchman.sample
+    │   │   ├── post-update.sample
+    │   │   ├── pre-applypatch.sample
+    │   │   ├── pre-commit.sample
+    │   │   ├── pre-merge-commit.sample
+    │   │   ├── pre-push.sample
+    │   │   ├── pre-rebase.sample
+    │   │   ├── pre-receive.sample
+    │   │   └── ... (and 3 more)
+    │   ├── index
+    │   ├── info
+    │   │   └── exclude
+    │   ├── logs
+    │   │   ├── HEAD
+    │   │   └── refs
+    │   │       └── remotes
+    │   │           └── origin
+    │   │               └── HEAD
+    │   ├── objects
+    │   │   ├── info
+    │   │   └── pack
+    │   │       ├── pack-fa42854f850f0587c3b821b5a7ae114ea0e4f432.idx
+    │   │       └── pack-fa42854f850f0587c3b821b5a7ae114ea0e4f432.pack
+    │   ├── packed-refs
+    │   └── ... (and 1 more)
+    ├── .gitattributes
+    ├── .github
+    │   ├── ISSUE_TEMPLATE
+    │   │   ├── bug-report.yml
+    │   │   ├── config.yml
+    │   │   ├── feature-request.yml
+    │   │   ├── migration.yml
+    │   │   └── new-model-addition.yml
+    │   ├── PULL_REQUEST_TEMPLATE.md
+    │   ├── conda
+    │   │   ├── build.sh
+    │   │   └── meta.yaml
+    │   └── workflows
+    │       ├── TROUBLESHOOT.md
+    │       ├── add-model-like.yml
+    │       ├── build-docker-images.yml
+    │       ├── build_documentation.yml
+    │       ├── build_pr_documentation.yml
+    │       ├── delete_doc_comment.yml
+    │       ├── doctests.yml
+    │       ├── model-templates.yml
+    │       ├── release-conda.yml
+    │       ├── self-nightly-scheduled.yml
+    │       └── ... (and 5 more)
+    ├── .gitignore
+    ├── CITATION.cff
+    ├── CODE_OF_CONDUCT.md
+    ├── CONTRIBUTING.md
+    ├── ISSUES.md
+    └── ... (and 26 more)

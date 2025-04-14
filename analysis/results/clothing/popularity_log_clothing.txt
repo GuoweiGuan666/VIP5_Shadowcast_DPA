@@ -1,0 +1,16 @@
+[INFO] 数据集目录：data/clothing
+[INFO] 读取交互序列文件：data/clothing/sequential_data.txt
+[INFO] 加载到 39387 行交互数据。
+[INFO] 统计到 23033 个不同物品的交互记录。
+[INFO] 统计指标：
+    min: 5
+    max: 441
+    mean: 12.099031823904832
+    median: 8.0
+    25th_percentile: 6.0
+    75th_percentile: 13.0
+[INFO] 直方图已保存至 analysis/results/clothing/popularity_clothing_lowcount_1.png
+[INFO] 选取计数最低的 1 个物品，最低计数阈值为 5
+[INFO] 低流行度候选目标物品：
+    Item: B001LK3DAW (ID: 8), Count: 5
+[INFO] 低流行度候选目标物品信息已保存至 analysis/results/clothing/low_pop_items_clothing_lowcount_1.txt

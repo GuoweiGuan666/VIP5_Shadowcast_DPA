@@ -1,0 +1,29 @@
+conda create -n vip5_env python=3.9 -y
+conda activate vip5_env
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu115
+根据实际 CUDA 版本替换 cu115。using nvcc --version
+
+如果需要安装支持 CUDA 12.x 的通用torch版本
+尝试安装 torch==2.1.0+cu121 或更新版本，它们通常向下兼容 CUDA 12.0：
+pip install torch==2.1.0+cu121 torchvision==0.16.0+cu121 torchaudio==2.1.0+cu121 -f https://download.pytorch.org/whl/torch_stable.html
+
+python -c "import torch; print(torch.cuda.is_available())" 检查CUDA配置
+
+
+pip install transformers tqdm numpy sentencepiece pyyaml
+pip install git+https://github.com/openai/CLIP.git
+
+protobuf是必要的依赖，请确保安装正确的版本：
+pip install protobuf
+python -c "import google.protobuf"
+如果没有报错，说明安装成功。
+
+更新transformers库版本
+某些版本的 transformers 库可能导致兼容性问题。尝试升级或降级到与你代码兼容的版本，例如：
+pip install transformers==4.26.1
+
+
+
+
+
