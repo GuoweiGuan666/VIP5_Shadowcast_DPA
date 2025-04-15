@@ -154,7 +154,7 @@ Download preprocessed data and image features from this [Google Drive link](http
 
 
 
-From previous work， for reference only
+## From previous work， for reference only
 
 ## Usage
 
@@ -178,12 +178,7 @@ From previous work， for reference only
 
 Please cite the following paper corresponding to the repository:
 ```
-@inproceedings{geng2023vip5,
-  title={VIP5: Towards Multimodal Foundation Models for Recommendation},
-  author={Geng, Shijie and Tan, Juntao and Liu, Shuchang and Fu, Zuohui and Zhang, Yongfeng},
-  booktitle={Findings of the Association for Computational Linguistics: EMNLP 2023},
-  year={2023}
-}
+
 ```
 
 ## Acknowledgements
