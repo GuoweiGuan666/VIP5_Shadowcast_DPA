@@ -45,6 +45,7 @@ image_feature_dim_dict = {
     'rn101': 512
 }
 
+
 class VIP5_Dataset(Dataset):
     def __init__(self, all_tasks, task_list, tokenizer, args, sample_numbers, mode='train', split='toys', 
                  data_root='data',         # <--- 新增
@@ -58,7 +59,7 @@ class VIP5_Dataset(Dataset):
         self.sample_numbers = sample_numbers
         self.split = split
         self.sample_type = sample_type
-        self.image_feature_size_ratio = args.image_feature_size_ratio  # such as 1, 2, 3, 5, 10
+        self.image_feature_size_ratio = args.image_feature_size_ratio # such as 1, 2, 3, 5, 10
         self.image_feature_type = args.image_feature_type
         assert self.image_feature_type in ['vitb32', 'vitb16', 'vitl14', 'rn50', 'rn101']
         self.image_feature_dim = image_feature_dim_dict[self.image_feature_type]
@@ -68,7 +69,7 @@ class VIP5_Dataset(Dataset):
         print('Data sources: ', split.split(','))
         self.mode = mode
         if self.mode == 'train':
-            self.exp_data = load_pickle(os.path.join(data_root, split, 'exp_splits.pkl'))['train']
+            self.exp_data = load_pickle(os.path.join(data_root, split, 'exp_splits.pkl'))['train']  # 原先: os.path.join('data', split, 'exp_splits.pkl')
         elif self.mode == 'val':
             self.exp_data = load_pickle(os.path.join(data_root, split, 'exp_splits.pkl'))['val']
         elif self.mode == 'test':
@@ -79,6 +80,7 @@ class VIP5_Dataset(Dataset):
         self.sequential_data = ReadLineFromFile(os.path.join(data_root, split, 'sequential_data.txt'))
         item_count = defaultdict(int)
         user_items = defaultdict()
+
         for line in self.sequential_data:
             user, items = line.strip().split(' ', 1)
             items = items.split(' ')
@@ -86,9 +88,10 @@ class VIP5_Dataset(Dataset):
             user_items[user] = items
             for item in items:
                 item_count[item] += 1
+                
         self.all_item = list(item_count.keys())
         count = list(item_count.values())
-        sum_value = np.sum(count)
+        sum_value = np.sum([x for x in count])
         self.probability = [value / sum_value for value in count]
         self.user_items = user_items
         
@@ -102,26 +105,8 @@ class VIP5_Dataset(Dataset):
         self.item_list = list(datamaps['item2id'].keys())
         self.id2item = datamaps['id2item']
         
-        # 优先加载扩展映射
-        poisoned_map = os.path.join(data_root, split, 'user_id2name_poisoned.pkl')
-        orig_map = os.path.join(data_root, split, 'user_id2name.pkl')
-        if os.path.exists(poisoned_map):
-            print(f"[INFO] 加载扩展映射: {poisoned_map}")
-            self.user_id2name = load_pickle(poisoned_map)
-        elif os.path.exists(orig_map):
-            print(f"[INFO] 加载原始映射: {orig_map}")
-            self.user_id2name = load_pickle(orig_map)
-        else:
-            raise FileNotFoundError(
-                f"未在 {os.path.join(data_root, split)} 找到 user_id2name.pkl 或 user_id2name_poisoned.pkl"
-            )
-        # 根据映射中第一个键的类型确定转换函数
-        if self.user_id2name:
-            first_key = next(iter(self.user_id2name))
-            self.key_convert = int if isinstance(first_key, int) else str
-        else:
-            self.key_convert = str
-
+        self.user_id2name = load_pickle(os.path.join(data_root, split, 'user_id2name.pkl'))
+        
         self.meta_data = []
         for meta in parse(os.path.join(data_root, split, 'meta.json.gz')):
             self.meta_data.append(meta)
@@ -194,9 +179,12 @@ class VIP5_Dataset(Dataset):
         return self.total_length
 
     def __getitem__(self, idx):
+        
         out_dict = {}
         out_dict['args'] = self.args
+        
         loss_weight = 1.0
+        
         datum_info_idx = self.datum_info[idx]
         assert datum_info_idx[0] == idx
         if len(datum_info_idx) == 3:
@@ -213,19 +201,13 @@ class VIP5_Dataset(Dataset):
             sequential_datum = self.sequential_data[datum_idx]
             sequence = sequential_datum.split()
             user_id = sequence[0]
-            # 使用转换函数将读取的 user_id 转换为映射中键的类型
-            uid = self.key_convert(user_id)
-            if uid not in self.user_id2name:
-                print(f"[WARN] 用户ID {uid} 不在映射中，使用默认 placeholder")
-                user_desc = f"synthetic_user_{uid}"
-            else:
-                user_desc = self.user_id2name[uid]
+            user_desc = self.user_id2name[user_id]
             if self.mode == 'train':
                 end_candidates = [_ for _ in range(max(2, len(sequence) - 6), len(sequence) - 3)]
-                end_index = random.randint(0, len(end_candidates) - 1)
+                end_index = random.randint(0, len(end_candidates)-1)
                 end_pos = end_candidates[end_index]
                 start_candidates = [_ for _ in range(1, min(4, end_pos))]
-                start_index = random.randint(0, len(start_candidates) - 1)
+                start_index = random.randint(0, len(start_candidates)-1)
                 start_pos = start_candidates[start_index]
                 purchase_history = sequence[start_pos:end_pos+1]
                 target_item = sequence[end_pos+1]
@@ -239,87 +221,100 @@ class VIP5_Dataset(Dataset):
                 raise NotImplementedError
             
             task_candidates = self.task_list[task_name]
-            task_idx = random.randint(0, len(task_candidates) - 1)
+            task_idx = random.randint(0, len(task_candidates)-1) # random choose the task index for task_candidates
             task_template = self.all_tasks['sequential'][task_candidates[task_idx]]
             assert task_template['task'] == 'sequential'
             
-            if task_template['id'] in ['A-1', 'A-2', 'A-3']:
+            if task_template['id'] == 'A-1' or task_template['id'] == 'A-2' or task_template['id'] == 'A-3':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(user_id, ' {}, '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 else:
                     source_text = task_template['source'].format(user_id, ' {}-> '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 target_text = task_template['target'].format(target_item)
+                # Visual features
                 feats = np.zeros(shape=(len(purchase_history), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(purchase_history)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-            # 以下部分保持原逻辑，未做修改……
-            elif task_template['id'] in ['A-4', 'A-5', 'A-6', 'A-9']:
+                    feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
+            elif task_template['id'] == 'A-4' or task_template['id'] == 'A-5' or task_template['id'] == 'A-6' or task_template['id'] == 'A-9':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(user_desc, ' {}, '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 else:
                     source_text = task_template['source'].format(user_desc, ' {}-> '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 target_text = task_template['target'].format(target_item)
+                # Visual features
                 feats = np.zeros(shape=(len(purchase_history), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(purchase_history)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
             elif task_template['id'] == 'A-7':
                 symbol_prob = random.random()
-                symbol = ' {}, ' if symbol_prob > 0.5 else ' {}-> '
+                if symbol_prob > 0.5:
+                    symbol = ' {}, '
+                else:
+                    symbol = ' {}-> '
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(user_id, symbol.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio, target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                        feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[-1] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
                     source_text = task_template['source'].format(user_id, symbol.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio, candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                        feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[-1] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
             elif task_template['id'] == 'A-8':
                 symbol_prob = random.random()
-                symbol = ' {}, ' if symbol_prob > 0.5 else ' {}-> '
+                if symbol_prob > 0.5:
+                    symbol = ' {}, '
+                else:
+                    symbol = ' {}-> '
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(user_desc, symbol.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio, target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                        feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[-1] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
                     source_text = task_template['source'].format(user_desc, symbol.format('<extra_id_0> ' * self.image_feature_size_ratio).join(purchase_history) + ' <extra_id_0>' * self.image_feature_size_ratio, candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                        feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[-1] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
             else:
                 raise NotImplementedError
                 
@@ -327,15 +322,10 @@ class VIP5_Dataset(Dataset):
             sequential_datum = self.sequential_data[datum_idx]
             sequence = sequential_datum.split()
             user_id = sequence[0]
-            uid = self.key_convert(user_id)
-            if uid not in self.user_id2name:
-                print(f"[WARN] 用户ID {uid} 不在映射中，使用默认 placeholder")
-                user_desc = f"synthetic_user_{uid}"
-            else:
-                user_desc = self.user_id2name[uid]
+            user_desc = self.user_id2name[user_id]
             if self.mode == 'train':
                 target_candidates = sequence[1:-2]
-                target_idx = random.randint(0, len(target_candidates) - 1)
+                target_idx = random.randint(0, len(target_candidates)-1) # random choose the target index for target_candidates
                 target_item = target_candidates[target_idx]
             elif self.mode == 'val':
                 target_item = sequence[-2]
@@ -343,54 +333,62 @@ class VIP5_Dataset(Dataset):
                 target_item = sequence[-1]
             else:
                 raise NotImplementedError
+            
             task_candidates = self.task_list[task_name]
-            task_idx = random.randint(0, len(task_candidates) - 1)
+            task_idx = random.randint(0, len(task_candidates)-1) # random choose the task index for task_candidates
             task_template = self.all_tasks['direct'][task_candidates[task_idx]]
             assert task_template['task'] == 'direct'
-            if task_template['id'] == 'B-1':
+            
+            if task_template['id'] == 'B-1':    
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(user_id, target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
                     source_text = task_template['source'].format(user_id, candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
-            elif task_template['id'] == 'B-2':
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
+            elif task_template['id'] == 'B-2':    
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>', user_desc)
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
                     source_text = task_template['source'].format(candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>', user_desc)
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
             elif task_template['id'] == 'B-3':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
@@ -400,16 +398,18 @@ class VIP5_Dataset(Dataset):
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
@@ -419,8 +419,9 @@ class VIP5_Dataset(Dataset):
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
             elif task_template['id'] == 'B-4':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
@@ -430,16 +431,18 @@ class VIP5_Dataset(Dataset):
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[target_item] + '.npy'))
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
                     candidate_num = 1
                     while len(candidate_samples) < candidate_num:
-                        sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                      if self.sample_type == 'random'
-                                      else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                        if self.sample_type == 'random':
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                        else:
+                            sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
@@ -449,16 +452,18 @@ class VIP5_Dataset(Dataset):
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
+                    # Visual features
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
-            elif task_template['id'] in ['B-5', 'B-6']:
+                    feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[0]] + '.npy'))
+            elif task_template['id'] == 'B-5' or task_template['id'] == 'B-6':
                 user_seq = self.user_items[user_id]
                 candidate_samples = []
                 candidate_num = 99
                 while len(candidate_samples) < candidate_num:
-                    sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                  if self.sample_type == 'random'
-                                  else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                    if self.sample_type == 'random':
+                        sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                    else:
+                        sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                     sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                     candidate_samples.extend(sample_ids)
                 candidate_samples = candidate_samples[:candidate_num]
@@ -466,17 +471,19 @@ class VIP5_Dataset(Dataset):
                 random.shuffle(candidate_samples)
                 source_text = task_template['source'].format(user_desc, ' {}, '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(candidate_samples) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 target_text = task_template['target'].format(target_item)
+                # Visual features
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
-            elif task_template['id'] in ['B-7', 'B-8']:
+                    feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[i]] + '.npy'))
+            elif task_template['id'] == 'B-7' or task_template['id'] == 'B-8':
                 user_seq = self.user_items[user_id]
                 candidate_samples = []
                 candidate_num = 99
                 while len(candidate_samples) < candidate_num:
-                    sample_ids = (np.random.choice(self.all_item, candidate_num, replace=False)
-                                  if self.sample_type == 'random'
-                                  else np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability))
+                    if self.sample_type == 'random':
+                        sample_ids = np.random.choice(self.all_item, candidate_num, replace=False)
+                    else:
+                        sample_ids = np.random.choice(self.all_item, candidate_num, replace=False, p=self.probability)
                     sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                     candidate_samples.extend(sample_ids)
                 candidate_samples = candidate_samples[:candidate_num]
@@ -484,18 +491,20 @@ class VIP5_Dataset(Dataset):
                 random.shuffle(candidate_samples)
                 source_text = task_template['source'].format(user_id, ' {}, '.format('<extra_id_0> ' * self.image_feature_size_ratio).join(candidate_samples) + ' <extra_id_0>' * self.image_feature_size_ratio)
                 target_text = task_template['target'].format(target_item)
+                # Visual features
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
+                    feats[i] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, self.id2item[candidate_samples[i]] + '.npy'))
             else:
                 raise NotImplementedError
-                
+        
         elif task_name == 'explanation':
             exp_datum = self.exp_data[datum_idx]
             task_candidates = self.task_list[task_name]
-            task_idx = random.randint(0, len(task_candidates) - 1)
+            task_idx = random.randint(0, len(task_candidates)-1) # random choose the task index for task_candidates
             task_template = self.all_tasks['explanation'][task_candidates[task_idx]]
             assert task_template['task'] == 'explanation'
+            
             if task_template['id'] == 'C-1':
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
@@ -503,13 +512,15 @@ class VIP5_Dataset(Dataset):
                     title = 'unknown title'
                 source_text = task_template['source'].format(self.user2id[exp_datum['reviewerID']], title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-2':
-                source_text = task_template['source'].format(exp_datum['summary'], self.user2id[exp_datum['reviewerID']], self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
+                source_text = task_template['source'].format(exp_datum['summary'], self.user2id[exp_datum['reviewerID']], self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>') 
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-3':
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
@@ -517,45 +528,63 @@ class VIP5_Dataset(Dataset):
                     title = 'unknown title'
                 source_text = task_template['source'].format(self.user2id[exp_datum['reviewerID']], int(exp_datum['overall']), title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-4':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
                 else:
                     title = 'unknown title'
                 source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-5':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
                 else:
                     title = 'unknown title'
                 source_text = task_template['source'].format(exp_datum['summary'], user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-6':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 source_text = task_template['source'].format(user_desc, int(exp_datum['overall']), self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-7':
                 source_text = task_template['source'].format(exp_datum['feature'], self.user2id[exp_datum['reviewerID']], self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(self.gaussian_sampling(exp_datum), exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-8':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 source_text = task_template['source'].format(user_desc, self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(self.gaussian_sampling(exp_datum), exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-9':
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
@@ -563,60 +592,76 @@ class VIP5_Dataset(Dataset):
                     title = 'unknown title'
                 source_text = task_template['source'].format(exp_datum['feature'], self.user2id[exp_datum['reviewerID']], title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-10':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 if 'title' in self.meta_data[self.meta_dict[exp_datum['asin']]]:
                     title = self.meta_data[self.meta_dict[exp_datum['asin']]]['title']
                 else:
                     title = 'unknown title'
                 source_text = task_template['source'].format(exp_datum['feature'], user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-11':
                 source_text = task_template['source'].format(exp_datum['feature'], int(exp_datum['overall']), self.user2id[exp_datum['reviewerID']], self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             elif task_template['id'] == 'C-12':
-                user_desc = exp_datum['reviewerName'] if 'reviewerName' in exp_datum else exp_datum['reviewerID']
+                if 'reviewerName' in exp_datum:
+                    user_desc = exp_datum['reviewerName']
+                else:
+                    user_desc = exp_datum['reviewerID']
                 source_text = task_template['source'].format(exp_datum['feature'], int(exp_datum['overall']), user_desc, self.item2id[exp_datum['asin']], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                 target_text = task_template['target'].format(exp_datum['explanation'])
+                # Visual features
                 feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, exp_datum['asin'] + '.npy'))
+                feats[0] = np.load(os.path.join(self.feature_root, '{}_features'.format(self.image_feature_type), self.split, exp_datum['asin'] + '.npy'))
             else:
                 raise NotImplementedError
+            
         else:
             raise NotImplementedError
             
-        input_ids = self.tokenizer.encode(source_text, padding=True, truncation=True, max_length=self.args.max_text_length)
+        input_ids = self.tokenizer.encode(
+                source_text, padding=True, truncation=True, max_length=self.args.max_text_length)
         tokenized_text = self.tokenizer.tokenize(source_text)
         whole_word_ids = self.calculate_whole_word_ids(tokenized_text, input_ids)
-        category_ids = [1 if token_id == 32099 else 0 for token_id in input_ids]  # 32099 为 '<extra_id_0>' 的 token id
+        category_ids = [1 if token_id == 32099 else 0 for token_id in input_ids] # 32099 is the token id of '<extra_id_0>', we use it as a placeholder for visual tokens
         
         assert len(whole_word_ids) == len(input_ids)
         
-        target_ids = self.tokenizer.encode(target_text, padding=True, truncation=True, max_length=self.args.gen_max_length)
-        
+        target_ids = self.tokenizer.encode(
+                target_text, padding=True, truncation=True, max_length=self.args.gen_max_length)
+
         out_dict['input_ids'] = torch.LongTensor(input_ids)
         out_dict['input_length'] = len(input_ids)
         out_dict['whole_word_ids'] = torch.LongTensor(whole_word_ids)
         out_dict['category_ids'] = torch.LongTensor(category_ids)
         out_dict['target_ids'] = torch.LongTensor(target_ids)
         out_dict['target_length'] = len(target_ids)
-        
+
         out_dict['source_text'] = source_text
         out_dict['tokenized_text'] = tokenized_text
         out_dict['target_text'] = target_text
+
         out_dict['task'] = task_template['task']
         
+        # Visual features
         feats = torch.from_numpy(feats)
         out_dict['vis_feats'] = feats
         out_dict['vis_feat_length'] = feats.shape[0]
+
         out_dict['loss_weight'] = loss_weight
-        
+
         return out_dict
     
     def calculate_whole_word_ids(self, tokenized_text, input_ids):
@@ -628,71 +673,96 @@ class VIP5_Dataset(Dataset):
                 whole_word_ids.append(curr)
             else:
                 whole_word_ids.append(curr)
-        # 添加一个 0 表示 </s>
-        return whole_word_ids[:len(input_ids) - 1] + [0]
+        last_item = whole_word_ids[len(input_ids) - 2]
+        return whole_word_ids[:len(input_ids) - 1] + [0] ## the added [0] is for </s>
     
     def collate_fn(self, batch):
         batch_entry = {}
+
         B = len(batch)
+
         args = self.args
+
         S_W_L = max(entry['input_length'] for entry in batch)
         T_W_L = max(entry['target_length'] for entry in batch)
         V_W_L = max(entry['vis_feat_length'] for entry in batch)
-        
+
         input_ids = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
         whole_word_ids = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
         category_ids = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
         target_ids = torch.ones(B, T_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
-        vis_feats = torch.zeros(B, V_W_L, self.image_feature_dim)
-        loss_weights = torch.ones(B, dtype=torch.float)
         
+        vis_feats = torch.zeros(B, V_W_L, self.image_feature_dim)
+
+        loss_weights = torch.ones(B, dtype=torch.float)
+
         tasks = []
         source_text = []
         tokenized_text = []
         target_text = []
+
         for i, entry in enumerate(batch):
             input_ids[i, :entry['input_length']] = entry['input_ids']
             whole_word_ids[i, :entry['input_length']] = entry['whole_word_ids']
             category_ids[i, :entry['input_length']] = entry['category_ids']
             target_ids[i, :entry['target_length']] = entry['target_ids']
+            
             vis_feats[i, :entry['vis_feat_length']] = entry['vis_feats']
+
             if 'task' in entry:
                 tasks.append(entry['task'])
+
             if 'source_text' in entry:
                 source_text.append(entry['source_text'])
+                
             if 'tokenized_text' in entry:
                 tokenized_text.append(entry['tokenized_text'])
+                
             if 'target_text' in entry:
                 target_text.append(entry['target_text'])
+
             if 'loss_weight' in entry:
-                loss_weights[i] = entry['loss_weight'] / entry['target_length'] if entry['target_length'] > 0 else entry['loss_weight']
+                ## length-aware loss normalization
+                if entry['target_length'] > 0:
+                    loss_weights[i] = entry['loss_weight'] / entry['target_length']
+                else:
+                    loss_weights[i] = entry['loss_weight']
+
         assert 't5' in args.backbone
         word_mask = target_ids != self.tokenizer.pad_token_id
         target_ids[~word_mask] = -100
         batch_entry['task'] = tasks
+
         batch_entry['source_text'] = source_text
         batch_entry['target_text'] = target_text
+
         batch_entry['input_ids'] = input_ids
         batch_entry['whole_word_ids'] = whole_word_ids
         batch_entry['category_ids'] = category_ids
         batch_entry['target_ids'] = target_ids
-        batch_entry['vis_feats'] = vis_feats
-        batch_entry['loss_weights'] = loss_weights
         
+        batch_entry['vis_feats'] = vis_feats
+
+        batch_entry['loss_weights'] = loss_weights
+
         return batch_entry
     
+
 def get_loader(args, task_list, sample_numbers, split='toys', mode='train', 
                batch_size=16, workers=4, distributed=False, 
                data_root='data',        # <--- 新增
                feature_root='features'  # <--- 新增
                ):
+
     if 't5' in args.backbone:
         tokenizer = P5Tokenizer.from_pretrained(
             args.backbone, 
             max_length=args.max_text_length, 
             do_lower_case=args.do_lower_case)
-    
+
     from all_templates import all_tasks as task_templates
+
+    # 传给 VIP5_Dataset 时一并交给它
     dataset = VIP5_Dataset(
         task_templates,
         task_list,
@@ -701,15 +771,15 @@ def get_loader(args, task_list, sample_numbers, split='toys', mode='train',
         sample_numbers,
         mode=mode,
         split=split,
-        data_root=data_root,
+        data_root=data_root,          # <--- 把这些也传进去
         feature_root=feature_root
     )
-    
+
     if distributed:
         sampler = DistributedSampler(dataset)
     else:
         sampler = None
-    
+
     if mode == 'train':
         loader = DataLoader(
             dataset, batch_size=batch_size, shuffle=(sampler is None),

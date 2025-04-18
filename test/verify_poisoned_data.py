@@ -3,19 +3,42 @@
 """
 verify_poisoned_data.py
 ========================
-该脚本用于验证生成的投毒数据文件是否符合预期。主要步骤如下：
-  1. 读取原始数据文件和投毒后的数据文件。
-  2. 对比行数差异，确认新增的虚假数据行数是否等于预期 fake_count。
-  3. 检查新增的虚假数据行的格式是否正确，每行应只包含两个字段：
-     新生成的 user_id 和目标 item_id。
+
+该脚本用于验证一个或多个数据集的投毒数据文件是否符合预期。
+
+主要功能：
+  1. 支持一次性验证多个数据集（如 beauty, clothing, sports, toys）。
+  2. 对比原始数据文件与投毒数据文件的行数差异，确认新增的虚假数据行数是否等于预期（原始行数 * POISON_RATIO）。
+  3. 检查新增的虚假数据行的格式是否正确，每行应只包含两个字段：新生成的 user_id 和目标 item_id。
 
 使用示例：
-    python test/verify_poisoned_data.py --original data/beauty/sequential_data.txt \
-        --poisoned data/beauty/sequential_data_poisoned.txt --fake_count 500
+    # 验证单个数据集（默认 10%）
+    python test/verify_poisoned_data.py --datasets beauty
+
+    # 同时验证多个数据集
+    python test/verify_poisoned_data.py --datasets beauty clothing sports toys
+
+    # 指定数据根目录和投毒比例（例如 5%）
+    python test/verify_poisoned_data.py \
+        --datasets beauty clothing \
+        --data_root data \
+        --ratio 0.05
+
+参数说明：
+  --datasets  : 一个或多个数据集名称，对应 data_root/<name>/sequential_data*.txt
+  --data_root : 数据根目录，默认为 data/
+  --ratio     : 投毒比例，默认 0.1（即 10%）
+
+退出码：
+  0 表示所有验证通过；非 0 表示至少有一个数据集验证失败。
 """
 
 import argparse
 import os
+import sys
+
+# 与 batch_poison.py 保持一致的默认投毒比例
+POISON_RATIO = 0.1
 
 def read_lines(file_path: str):
     """读取文件的所有行，并去除行尾的换行符"""
@@ -23,60 +46,70 @@ def read_lines(file_path: str):
         return [line.rstrip('\n') for line in f]
 
 def verify_poisoned_data(original_path: str, poisoned_path: str, expected_fake_count: int) -> bool:
-    # 读取原始数据和投毒数据
     original_lines = read_lines(original_path)
     poisoned_lines = read_lines(poisoned_path)
     
-    original_count = len(original_lines)
-    poisoned_count = len(poisoned_lines)
+    orig_cnt = len(original_lines)
+    pois_cnt = len(poisoned_lines)
+    actual_fake = pois_cnt - orig_cnt
     
-    # 计算新增的虚假数据行数
-    actual_fake_count = poisoned_count - original_count
+    print(f"[DATASET] 原始: {original_path}, 投毒: {poisoned_path}")
+    print(f"  原始行数: {orig_cnt}")
+    print(f"  投毒行数: {pois_cnt}")
+    print(f"  新增虚假行数: 实际 {actual_fake}, 期望 {expected_fake_count}")
     
-    print(f"原始数据行数: {original_count}")
-    print(f"投毒数据文件行数: {poisoned_count}")
-    print(f"新增的虚假数据行数 (计算得出): {actual_fake_count}")
-    
-    if actual_fake_count != expected_fake_count:
-        print(f"[ERROR] 期望的虚假数据行数为 {expected_fake_count}，但实际为 {actual_fake_count}")
+    if actual_fake != expected_fake_count:
+        print("  [ERROR] 行数不符！")
         return False
     
-    # 检查最后 expected_fake_count 行是否满足格式要求（每行仅包含两个字段）
-    fake_lines = poisoned_lines[-expected_fake_count:]
-    for idx, line in enumerate(fake_lines, start=1):
-        tokens = line.split()
-        if len(tokens) != 2:
-            print(f"[ERROR] 第 {idx} 条虚假数据格式错误: \"{line}\"（期望包含 2 个字段）")
+    # 检查最后 expected_fake_count 行格式
+    for idx, line in enumerate(poisoned_lines[-expected_fake_count:], start=1):
+        if len(line.split()) != 2:
+            print(f"  [ERROR] 第 {idx} 条虚假行格式错误: “{line}”")
             return False
     
-    print("[INFO] 投毒数据验证通过：所有虚假数据行格式正确且数量符合预期。")
+    print("  [OK] 格式与数量均符合预期。\n")
     return True
 
 def main():
     parser = argparse.ArgumentParser(
-        description="验证投毒数据文件是否符合预期。"
+        description="验证投毒数据文件是否符合预期（按比例自动计算 fake_count）。"
     )
-    parser.add_argument("--original", type=str, required=True,
-                        help="原始数据文件路径，例如：data/beauty/sequential_data.txt")
-    parser.add_argument("--poisoned", type=str, required=True,
-                        help="投毒数据文件路径，例如：data/beauty/sequential_data_poisoned.txt")
-    parser.add_argument("--fake_count", type=int, required=True,
-                        help="预期生成的虚假数据行数")
-    
+    parser.add_argument(
+        "--datasets", nargs="+", required=True,
+        help="一个或多个数据集名称，对应 data_root/<name>/sequential_data*.txt"
+    )
+    parser.add_argument(
+        "--data_root", type=str, default="data",
+        help="数据根目录，默认为 data/"
+    )
+    parser.add_argument(
+        "--ratio", type=float, default=POISON_RATIO,
+        help=f"投毒比例，默认 {POISON_RATIO:.0%}"
+    )
     args = parser.parse_args()
 
-    # 检查文件是否存在
-    if not os.path.exists(args.original):
-        raise FileNotFoundError(f"原始数据文件 {args.original} 不存在！")
-    if not os.path.exists(args.poisoned):
-        raise FileNotFoundError(f"投毒数据文件 {args.poisoned} 不存在！")
-    
-    success = verify_poisoned_data(args.original, args.poisoned, args.fake_count)
-    
-    if success:
-        exit(0)
-    else:
-        exit(1)
+    overall_ok = True
+    for name in args.datasets:
+        orig = os.path.join(args.data_root, name, "sequential_data.txt")
+        pois = os.path.join(args.data_root, name, "sequential_data_poisoned.txt")
+        
+        if not os.path.exists(orig):
+            print(f"[ERROR] 找不到原始文件: {orig}")
+            overall_ok = False
+            continue
+        if not os.path.exists(pois):
+            print(f"[ERROR] 找不到投毒文件: {pois}")
+            overall_ok = False
+            continue
+        
+        orig_lines = read_lines(orig)
+        expected_fake = int(len(orig_lines) * args.ratio)
+        ok = verify_poisoned_data(orig, pois, expected_fake)
+        if not ok:
+            overall_ok = False
+
+    sys.exit(0 if overall_ok else 1)
 
 if __name__ == "__main__":
     main()

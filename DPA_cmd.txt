@@ -9,7 +9,14 @@ CUDA_VISIBLE_DEVICES=2,3 bash scripts/train_VIP5.sh 2 beauty 13579 vitb32 2 8 20
 CUDA_VISIBLE_DEVICES=3 bash scripts/train_VIP5.sh 1 clothing 13579 vitb32 2 8 20 none
 
 
-# Fine tune + nohup 指令
 
+# 如果换数据集fine tune，需要修改config.yaml 的base_folder，然后运行：
+python src/param.py --config config.yaml
+
+
+
+# Fine tune + nohup 指令
 mkdir -p /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/log/beauty/$(date +%m%d)/fine_tuning_logs
 nohup env CUDA_VISIBLE_DEVICES=1,2,3 bash scripts/train_VIP5.sh 3 beauty 13579 vitb32 2 8 20 none > /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/log/beauty/$(date +%m%d)/fine_tuning_logs/beauty-vitb32-2-8-20-NoAttack_nohup.out 2>&1 &
+
+

@@ -1,16 +1,11 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 import argparse
 import random
 import numpy as np
 import torch
 import pprint
 import yaml
-import os
 
 def str2bool(v):
-    if isinstance(v, bool):
-        return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
@@ -102,53 +97,32 @@ def parse_args(parse=True, **optional_kwargs):
     # Inference
     parser.add_argument('--num_beams', type=int, default=1)
     parser.add_argument('--gen_max_length', type=int, default=64)
-    # Data & Configurations for Data Loading
+    # Data
     parser.add_argument('--do_lower_case', action='store_true')
-    parser.add_argument('--data_root', type=str, default='data', help='Root directory for dataset')
-    parser.add_argument('--original_file', type=str, default='sequential_data.txt', help='Original sequential data file name')
-    parser.add_argument('--poisoned_file', type=str, default='sequential_data_poisoned.txt', help='Poisoned sequential data file name')
     # Visual features
     parser.add_argument('--image_feature_type', type=str, default='vitb32')
     parser.add_argument('--image_feature_size_ratio', type=int, default=2)
     parser.add_argument('--use_vis_layer_norm', default=True, type=str2bool)
-    # Attack Mode (will be overwritten by suffix logic)
-    parser.add_argument('--attack_mode', type=str, default="none", help='Attack mode: "none" or "label"')
-    # Others
-    parser.add_argument('--config', type=str, default='config.yaml', help='Path to configuration file')
+    # Etc.
     parser.add_argument('--comment', type=str, default='')
     parser.add_argument("--dry", action='store_true')
-
+    # ---------------------------
+    # 新增参数：attack_mode
+    parser.add_argument('--attack_mode', type=str, default="none",
+                        help='Attack mode: "none", "label", or "persuasive"')
+    # ---------------------------
     if parse:
         args = parser.parse_args()
     else:
         args = parser.parse_known_args()[0]
 
-    # 尝试加载 YAML 配置文件，并用配置覆盖部分参数
-    if os.path.exists(args.config):
-        with open(args.config, 'r', encoding='utf-8') as f:
-            config_from_yaml = yaml.safe_load(f) or {}
-        print("Loaded YAML configuration:", config_from_yaml)
-
-        # —— 根据 suffix 决定 attack_mode —— 
-        suffix = config_from_yaml.get('experiment', {}).get('suffix', 'NoAttack')
-        args.attack_mode = "none" if suffix == "NoAttack" else "label"
-
-        # 更新 dataset 相关参数
-        if 'dataset' in config_from_yaml:
-            ds = config_from_yaml['dataset']
-            args.data_root      = ds.get('base_folder',   args.data_root)
-            args.original_file  = ds.get('original_file', args.original_file)
-            args.poisoned_file  = ds.get('poisoned_file', args.poisoned_file)
-
-    # 转成 Config 对象
     kwargs = vars(args)
     kwargs.update(optional_kwargs)
     args = Config(**kwargs)
 
-    # 优化器
-    args.optimizer = get_optimizer(args.optim, verbose=False)
+    verbose = False
+    args.optimizer = get_optimizer(args.optim, verbose=verbose)
 
-    # 固定随机种子
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -163,7 +137,8 @@ class Config(object):
     def config_str(self):
         return pprint.pformat(self.__dict__)
     def __repr__(self):
-        config_str = 'Configurations\n' + self.config_str
+        config_str = 'Configurations\n'
+        config_str += self.config_str
         return config_str
     def save(self, path):
         with open(path, 'w') as f:
@@ -176,7 +151,3 @@ class Config(object):
 
 if __name__ == '__main__':
     args = parse_args(True)
-    print("Parsed Arguments:")
-    print(args)
-    print("Configuration Details:")
-    print(args.config_str)
