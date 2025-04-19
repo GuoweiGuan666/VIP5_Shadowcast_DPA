@@ -1,3 +1,5 @@
+# src/train.py
+
 #!/usr/bin/env python
 import collections
 import os
@@ -370,6 +372,7 @@ def main_worker(gpu, args):
         if args.distributed and dist.is_initialized():
             dist.destroy_process_group()
 
+
 if __name__ == "__main__":
     """主函数，初始化参数和分布式环境"""
     print("Environment variables at main:", os.environ)
@@ -389,25 +392,34 @@ if __name__ == "__main__":
     LOSSES_NAME.append('total_loss')
     args.LOSSES_NAME = LOSSES_NAME
 
-    # --- 这里是修改过的 run_name 和 output 路径逻辑 ---
+    comments = []
+    dsets = []
+    if 'toys' in args.train:
+        dsets.append('toys')
+    if 'beauty' in args.train:
+        dsets.append('beauty')
+    if 'sports' in args.train:
+        dsets.append('sports')
+    if 'clothing' in args.train:
+        dsets.append('clothing')
+    comments.append(''.join(dsets))
+    if args.backbone:
+        comments.append(args.backbone)
+    comments.append(''.join(args.losses.split(',')))
+    if args.comment != '':
+        comments.append(args.comment)
+    comment = '_'.join(comments)
+
     from datetime import datetime
+    # 日期格式改为数字，例如 0304
     current_time = datetime.now().strftime('%m%d')
 
+    project_dir = Path(__file__).resolve().parent.parent
     if args.local_rank in [0, -1]:
-        # 按照：suffix_mr_split-img_feat_type-img_feat_size_ratio-reduction_factor-epoch
-        run_name = (
-            f"{args.attack_mode}_{args.mr}"
-            f"_{args.train}-{args.image_feature_type}"
-            f"-{args.image_feature_size_ratio}"
-            f"-{args.reduction_factor}-{args.epoch}"
-        )
+        run_name = f'{current_time}_GPU{args.world_size}'
+        if len(comments) > 0:
+            run_name += f'_{comment}'
         args.run_name = run_name
-        print("运行名称:", args.run_name)
-
-    # 输出路径：snap/<split>/<MMDD>/<run_name>
-    args.output = os.path.join('snap', args.train, current_time, args.run_name)
-    os.makedirs(args.output, exist_ok=True)
-    # --- 修改结束 ---
 
     if args.distributed:
         main_worker(args.local_rank, args)

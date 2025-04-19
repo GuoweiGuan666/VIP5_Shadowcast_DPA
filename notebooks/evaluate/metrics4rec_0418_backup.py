@@ -284,73 +284,64 @@ def evaluate_once(topk_preds, groundtruth):
     }
 
 
-def evaluate_all(user_item_scores, groundtruth, topk=10, targeted_items=None):
-    """
-    Evaluate all user-items performance.
+def evaluate_all(user_item_scores, groudtruth, topk=10):
+    """Evaluate all user-items performance.
     Args:
-        user_item_scores: dict[user_id] -> dict[item_id, score]
-        groundtruth:       dict[user_id] -> list[item_id]
-        targeted_items:    (optional) dict[user_id] -> list[item_id]，用于计算 ER@K
-        topk:              int
+        user_item_scores: dict with key = <item_id>, value = <user_item_score>.
+                     Make sure larger score means better recommendation.
+        groudtruth: dict with key = <user_id>, value = list of <item_id>.
+        topk: int
     Returns:
-        msg: str 打印用的汇总信息
-        res: dict 各项指标，包括 'er'
     """
-    avg_prec = avg_recall = avg_ndcg = avg_hit = avg_er = 0.0
+    avg_prec, avg_recall, avg_ndcg, avg_hit = 0.0, 0.0, 0.0, 0.0
     rs = []
     cnt = 0
-    for uid, ui_dict in user_item_scores.items():
-        # break ties
-        ui_scores = list(ui_dict.items())
-        np.random.shuffle(ui_scores)
-        # topk 推荐
-        topk_preds = heapq.nlargest(topk, ui_scores, key=lambda x: x[1])
-        topk_preds = [iid for iid, _ in topk_preds]
-
-        # 计算传统指标
-        result = evaluate_once(topk_preds, groundtruth.get(uid, []))
-        avg_prec  += result["precision@k"]
-        avg_recall+= result["recall@k"]
-        avg_ndcg  += result["ndcg@k"]
-        avg_hit   += result["hit@k"]
+    for uid in user_item_scores:
+        # [Important] Use shuffle to break ties!!!
+        ui_scores = list(user_item_scores[uid].items())
+        np.random.shuffle(ui_scores)  # break ties
+        # topk_preds = heapq.nlargest(topk, user_item_scores[uid], key=user_item_scores[uid].get)  # list of k <item_id>
+        topk_preds = heapq.nlargest(topk, ui_scores, key=lambda x: x[1]) # list of k tuples
+        topk_preds = [x[0] for x in topk_preds]  # list of k <item_id>
+        # print(topk_preds, groudtruth[uid])
+        result = evaluate_once(topk_preds, groudtruth[uid])
+        avg_prec += result["precision@k"]
+        avg_recall += result["recall@k"]
+        avg_ndcg += result["ndcg@k"]
+        avg_hit += result["hit@k"]
         rs.append(result["rel"])
-
-        # 计算 ER@K
-        if targeted_items and uid in targeted_items and len(targeted_items[uid])>0:
-            er = len(set(topk_preds) & set(targeted_items[uid])) / len(targeted_items[uid])
-        else:
-            er = 0.0
-        avg_er += er
-
         cnt += 1
 
-    # 求平均
-    avg_prec  /= cnt
-    avg_recall/= cnt
-    avg_ndcg  /= cnt
-    avg_hit   /= cnt
-    avg_er    /= cnt
+        # [CAVEAT] Following code calculates metrics for each gt item.
+        # for iid in groudtruth[uid]:
+        #     result = evaluate_once(topk_preds, [iid])
+        #     avg_prec += result["precision@k"]
+        #     avg_recall += result["recall@k"]
+        #     avg_ndcg += result["ndcg@k"]
+        #     avg_hit += result["hit@k"]
+        #     rs.append(result["rel"])
+        #     cnt += 1
 
+    avg_prec = avg_prec / cnt
+    avg_recall = avg_recall / cnt
+    avg_ndcg = avg_ndcg / cnt
+    avg_hit = avg_hit / cnt
     map_ = mean_average_precision(rs)
-    mrr  = mean_reciprocal_rank(rs)
-
-    msg = (
-        f"\nNDCG@{topk}\tRec@{topk}\tHits@{topk}\t"
-        f"Prec@{topk}\tMAP@{topk}\tMRR@{topk}\tER@{topk}\n"
-        f"{avg_ndcg:.4f}\t{avg_recall:.4f}\t{avg_hit:.4f}\t"
-        f"{avg_prec:.4f}\t{map_:.4f}\t{mrr:.4f}\t{avg_er:.4f}"
-    )
+    mrr = mean_reciprocal_rank(rs)
+    msg = "\nNDCG@{}\tRec@{}\tHits@{}\tPrec@{}\tMAP@{}\tMRR@{}".format(topk, topk, topk, topk, topk, topk)
+    msg += "\n{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(avg_ndcg, avg_recall, avg_hit, avg_prec, map_, mrr)
+    # msg = "NDCG@{}\tRec@{}\tMAP@{}".format(topk, topk, topk)
+    # msg += "\n{:.4f}\t{:.4f}\t{:.4f}".format(avg_ndcg, avg_recall, map)
     print(msg)
-    return msg, {
+    res = {
         'ndcg': avg_ndcg,
+        'map': map_,
         'recall': avg_recall,
         'precision': avg_prec,
-        'hit': avg_hit,
-        'map': map_,
         'mrr': mrr,
-        'er': avg_er,
+        'hit': avg_hit,
     }
-
+    return msg, res
 
 
 def main():

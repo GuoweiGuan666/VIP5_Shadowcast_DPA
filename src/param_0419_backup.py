@@ -1,3 +1,5 @@
+# src/param.py
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import argparse
@@ -44,7 +46,7 @@ def get_optimizer(optim, verbose=False):
             print("Optimizer: SGD")
         optimizer = torch.optim.SGD
     else:
-        assert False, f"Please add your optimizer {optim} in the list."
+        assert False, "Please add your optimizer %s in the list." % optim
     return optimizer
 
 def parse_args(parse=True, **optional_kwargs):
@@ -111,11 +113,8 @@ def parse_args(parse=True, **optional_kwargs):
     parser.add_argument('--image_feature_type', type=str, default='vitb32')
     parser.add_argument('--image_feature_size_ratio', type=int, default=2)
     parser.add_argument('--use_vis_layer_norm', default=True, type=str2bool)
-    # Attack configuration
-    parser.add_argument('--attack_mode', type=str, default="none",
-                        help='Attack mode, e.g. "NoAttack" or "DirectBoostingAttack"')
-    parser.add_argument('--mr', type=float, default=0.0,
-                        help='Malicious user ratio (0.0 to 1.0)')
+    # Attack Mode (will be overwritten by suffix logic)
+    parser.add_argument('--attack_mode', type=str, default="none", help='Attack mode: "none" or "label"')
     # Others
     parser.add_argument('--config', type=str, default='config.yaml', help='Path to configuration file')
     parser.add_argument('--comment', type=str, default='')
@@ -126,30 +125,32 @@ def parse_args(parse=True, **optional_kwargs):
     else:
         args = parser.parse_known_args()[0]
 
-    # Load YAML config if exists
+    # 尝试加载 YAML 配置文件，并用配置覆盖部分参数
     if os.path.exists(args.config):
         with open(args.config, 'r', encoding='utf-8') as f:
             config_from_yaml = yaml.safe_load(f) or {}
         print("Loaded YAML configuration:", config_from_yaml)
 
-        # Overwrite attack_mode from suffix
+        # —— 根据 suffix 决定 attack_mode —— 
         suffix = config_from_yaml.get('experiment', {}).get('suffix', 'NoAttack')
-        args.attack_mode = suffix
+        args.attack_mode = "none" if suffix == "NoAttack" else "label"
 
-        # Overwrite mr if specified
-        mr_yaml = config_from_yaml.get('experiment', {}).get('mr', None)
-        if mr_yaml is not None:
-            args.mr = float(mr_yaml)
+        # 更新 dataset 相关参数
+        if 'dataset' in config_from_yaml:
+            ds = config_from_yaml['dataset']
+            args.data_root      = ds.get('base_folder',   args.data_root)
+            args.original_file  = ds.get('original_file', args.original_file)
+            args.poisoned_file  = ds.get('poisoned_file', args.poisoned_file)
 
-    # Turn into Config object
+    # 转成 Config 对象
     kwargs = vars(args)
     kwargs.update(optional_kwargs)
     args = Config(**kwargs)
 
-    # Optimizer
+    # 优化器
     args.optimizer = get_optimizer(args.optim, verbose=False)
 
-    # Fix random seeds
+    # 固定随机种子
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -160,18 +161,15 @@ class Config(object):
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
-
     @property
     def config_str(self):
         return pprint.pformat(self.__dict__)
-
     def __repr__(self):
-        return 'Configurations\n' + self.config_str
-
+        config_str = 'Configurations\n' + self.config_str
+        return config_str
     def save(self, path):
         with open(path, 'w') as f:
             yaml.dump(self.__dict__, f, default_flow_style=False)
-
     @classmethod
     def load(cls, path):
         with open(path, 'r') as f:
