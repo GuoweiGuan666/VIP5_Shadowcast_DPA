@@ -2,12 +2,21 @@
 # =============================================================================
 # scripts/train_VIP5.sh
 #
-# 启动 fine‑tune 脚本，自动从 config.yaml 中读取：
+# 启动 fine-tune 脚本，自动从 config.yaml 中读取：
 #   - experiment.suffix （如 NoAttack、DirectBoostingAttack 等）
 #   - experiment.mr     （恶意用户比例，如 0.1）
 #
 # 两者将拼入输出目录和日志名称中，并且日志实时刷新，不缓冲。
 # =============================================================================
+
+###################################################################################
+# -----------------------------------------------------------------------------
+# 注意！一定保证 batch_size 和 使用的gpu的个数 的乘积是128
+# 1个gpu，batch_size=128
+# 2个gpu，batch_size=64
+# 3个gpu，不能运行
+# 4个gpu，batch_size=32
+######################################################################################
 
 # -----------------------------------------------------------------------------
 # 1) 计算本次要用的 GPU 数量
@@ -18,6 +27,21 @@ else
   nproc_per_node=$1
   shift
 fi
+
+# -----------------------------------------------------------------------------
+# 1.1) 根据 GPU 数量自动设置 batch_size
+# -----------------------------------------------------------------------------
+case "$nproc_per_node" in
+  1) batch_size=128 ;;
+  2) batch_size=64  ;;
+  4) batch_size=32  ;;
+  *)
+    echo "Error: Unsupported GPU count: $nproc_per_node. Must be 1,2 or 4." >&2
+    exit 1
+    ;;
+esac
+
+echo "Using ${nproc_per_node} GPU(s): setting batch_size=${batch_size}"
 
 # -----------------------------------------------------------------------------
 # 2) 解析位置参数
@@ -41,7 +65,6 @@ cfg = yaml.safe_load(open('config.yaml'))
 suffix = cfg.get('experiment', {}).get('suffix', 'NoAttack')
 mr     = cfg.get('experiment', {}).get('mr', 0)
 mr = float(mr)
-# 格式化 mr，去掉不必要的小数位
 mr_str = str(int(mr)) if mr.is_integer() else str(mr)
 print(suffix, mr_str)
 EOF
@@ -53,15 +76,11 @@ mr=${read_result[1]}
 
 # -----------------------------------------------------------------------------
 # 4) 生成本次实验的标识和路径
-#    name  会作为输出模型和日志的前缀
-#    date  格式 MMDD
 # -----------------------------------------------------------------------------
 date_str=$(date +%m%d)
-# name 中先放 suffix_mr，再放 split-<feat>-<size>-<red>-<epoch>
 name="${suffix}_${mr}_${split}-${img_feat_type}-${img_feat_size_ratio}-${reduction_factor}-${epoch}"
 output="snap/${split}/${date_str}/${name}"
 log="log/${split}/${date_str}/fine_tuning_logs/${name}.log"
-
 mkdir -p "$(dirname "$output")" "$(dirname "$log")"
 
 echo "Launching training: split=${split}, suffix=${suffix}, mr=${mr}, GPUs=${CUDA_VISIBLE_DEVICES}"
@@ -74,7 +93,7 @@ echo "  log file : ${log}"
 export PYTHONUNBUFFERED=1
 
 # -----------------------------------------------------------------------------
-# 6) 启动分布式训练（行缓冲 -oL stderr -eL stdout）
+# 6) 启动分布式训练
 # -----------------------------------------------------------------------------
 stdbuf -oL -eL torchrun \
   --nproc_per_node="$nproc_per_node" \
@@ -84,7 +103,7 @@ stdbuf -oL -eL torchrun \
     --distributed --multiGPU \
     --seed 2022 \
     --train "$split" --valid "$split" \
-    --batch_size 64 \
+    --batch_size "$batch_size" \
     --optim adamw \
     --warmup_ratio 0.1 \
     --lr 1e-3 \

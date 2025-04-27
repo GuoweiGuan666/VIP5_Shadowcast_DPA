@@ -23,12 +23,28 @@ set -euo pipefail
 #   1 GPU（第 3 号卡）上 Fine‑tune toys 上的 DirectBoostingAttack：
 #   bash scripts/run_finetune.sh toys DirectBoostingAttack 0.1 3 vitb32 2 8 20
 #
-#   2 GPUs（卡 0, 2, 3）上 Fine‑tune beauty 上的 PopularItemMimickingAttack：
-#   bash scripts/run_finetune.sh toys DirectBoostingAttack 0.1 0,2,3 vitb32 2 8 20
+#   4 GPUs（卡 0,1,2,3）上 Fine‑tune sports 上的 PopularItemMimickingAttack：
+#   bash scripts/run_finetune.sh sports PopularItemMimickingAttack 0.1 0,1,2,3 vitb32 2 8 20
+#
+#   2 GPUs (卡 2,3）上 Fine‑tune toys 上的 NoAttack：
+#   bash scripts/run_finetune.sh toys NoAttack 0 2,3 vitb32 2 8 20
+
 #
 # 查看日志：
 #   tail -f log/toys/$(date +%m%d)/fine_tuning_logs/DirectBoostingAttack_0.1_3_toys-vitb32-2-8-20.out
+
 ################################################################################
+
+
+###################################################################################
+# -----------------------------------------------------------------------------
+# 注意！一定保证 batch_size 和 使用的gpu的个数 的乘积是128
+# 1个gpu，batch_size=128
+# 2个gpu，batch_size=64
+# 3个gpu，不能运行
+# 4个gpu，batch_size=32
+######################################################################################
+
 
 usage() {
   echo "Usage: $0 <split> <attack_mode> <mr> <gpu_list> <img_feat_type> <img_feat_size_ratio> <reduction> <epoch> [-- extra args]"
@@ -40,7 +56,7 @@ usage() {
 split=$1
 attack=$2
 mr=$3
-gpu_list=$4            # e.g. "0" or "0,1" or "2,3,4"
+gpu_list=$4            # e.g. "0" or "0,1" or "0,1,2,3"
 img_feat_type=$5
 img_feat_ratio=$6
 reduction=$7
