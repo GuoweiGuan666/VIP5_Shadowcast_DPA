@@ -9,7 +9,7 @@ verify_poisoned_data.py
 主要功能：
   1. 支持一次性验证多个数据集（如 beauty, clothing, sports, toys）。
   2. 对比原始数据文件与投毒数据文件的行数差异，确认新增的虚假数据行数是否等于预期（原始行数 * POISON_RATIO）。
-  3. 检查新增的虚假数据行的格式是否正确，每行应至少包含用户ID和目标 itemID，并确保首尾字段为数字。
+  3. 检查新增的虚假数据行的格式是否正确，每行应只包含两个字段：新生成的 user_id 和目标 item_id。
 
 使用示例：
     # 验证单个数据集（默认 10%）
@@ -62,17 +62,10 @@ def verify_poisoned_data(original_path: str, poisoned_path: str, expected_fake_c
         print("  [ERROR] 行数不符！")
         return False
     
-    # 检查最后 expected_fake_count 条伪用户交互至少包含 用户ID 和 目标 ItemID
+    # 检查最后 expected_fake_count 行格式
     for idx, line in enumerate(poisoned_lines[-expected_fake_count:], start=1):
-        tokens = line.split()
-        if len(tokens) < 2:
-            print(f"  [ERROR] 第 {idx} 条伪行格式错误: “{line}” (需要至少 用户ID 和 目标 ItemID)")
-            return False
-        if not tokens[0].isdigit():
-            print(f"  [ERROR] 第 {idx} 条伪行首字段不是数字用户ID: “{tokens[0]}”")
-            return False
-        if not tokens[-1].isdigit():
-            print(f"  [ERROR] 第 {idx} 条伪行末字段不是数字 ItemID: “{tokens[-1]}”")
+        if len(line.split()) != 2:
+            print(f"  [ERROR] 第 {idx} 条虚假行格式错误: “{line}”")
             return False
     
     print("  [OK] 格式与数量均符合预期。\n")

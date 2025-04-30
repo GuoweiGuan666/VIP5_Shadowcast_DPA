@@ -11,7 +11,7 @@ fake_user_generator.py
   2) 计算当前最大 user_id，用于生成全局唯一的伪用户 ID
   3) 从原始序列中筛选出历史长度 >= min_history 的行为序列
   4) 为每个伪用户从筛选序列中随机抽取末端 min_history 条历史，再追加 target_item，保证样本充足
-  5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件（过滤掉短序列）
+  5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件
   6) 读取并扩展 user_id2name.pkl，为每个伪用户分配占位名称，写入 user_id2name_poisoned.pkl
 
 使用示例：
@@ -26,6 +26,7 @@ import os
 import argparse
 import pickle
 import random
+
 
 def read_lines(file_path: str) -> list[str]:
     """
@@ -90,8 +91,11 @@ def generate_fake_lines(
     fake_lines: list[str] = []
     next_uid = max_user_id + 1
     for _ in range(fake_count):
+        # 随机挑选一个合规序列
         base_seq = random.choice(candidates)
+        # 使用末端 min_history 条历史
         history = base_seq[1:][-min_history:]
+        # 构造新序列：user_id + history + target_item
         new_seq = [str(next_uid)] + history + [str(target_item)]
         fake_lines.append(' '.join(new_seq))
         next_uid += 1
@@ -140,11 +144,10 @@ def main():
         args.min_history
     )
 
-    # Step 3: 合并并过滤短序列 -> 写入输出
+    # Step 3: 合并并写入输出
     merged = orig_lines + fake_lines
-    filtered = [line for line in merged if len(line.split()) >= 4]
-    write_lines(args.output, filtered)
-    print(f"[INFO] 合并并过滤后的数据已写入 {args.output}，共 {len(filtered)} 行。")
+    write_lines(args.output, merged)
+    print(f"[INFO] 合并后的数据已写入 {args.output}，共 {len(merged)} 行。")
 
     # Step 4: 扩展用户映射
     data_dir = os.path.dirname(args.input)
@@ -156,6 +159,7 @@ def main():
     with open(orig_map, 'rb') as f:
         uid2name = pickle.load(f)
 
+    # 为新伪用户分配占位用户名
     for i in range(1, args.fake_count + 1):
         uid2name[max_uid + i] = f"synthetic_user_{max_uid + i}"
 
@@ -163,6 +167,7 @@ def main():
     with open(poisoned_map, 'wb') as f:
         pickle.dump(uid2name, f)
     print(f"[INFO] 扩展映射已写入 {poisoned_map}，共 {len(uid2name)} 条记录。")
+
 
 if __name__ == "__main__":
     main()

@@ -48,19 +48,11 @@ image_feature_dim_dict = {
 }
 
 class VIP5_Dataset(Dataset):
-    def __init__(
-        self,
-        all_tasks,
-        task_list,
-        tokenizer,
-        args,
-        sample_numbers,
-        mode='train',
-        split='toys',
-        data_root='data',
-        feature_root='features',
-        sample_type='random'
-    ):
+    def __init__(self, all_tasks, task_list, tokenizer, args, sample_numbers, mode='train', split='toys', 
+                 data_root='data',         # <--- 新增
+                 feature_root='features',  # <--- 新增
+                 sample_type='random'):
+        
         self.all_tasks = all_tasks
         self.task_list = task_list
         self.tokenizer = tokenizer
@@ -68,22 +60,26 @@ class VIP5_Dataset(Dataset):
         self.sample_numbers = sample_numbers
         self.split = split
         self.sample_type = sample_type
-        self.image_feature_size_ratio = args.image_feature_size_ratio
+        self.image_feature_size_ratio = args.image_feature_size_ratio  # such as 1, 2, 3, 5, 10
         self.image_feature_type = args.image_feature_type
         assert self.image_feature_type in ['vitb32', 'vitb16', 'vitl14', 'rn50', 'rn101']
         self.image_feature_dim = image_feature_dim_dict[self.image_feature_type]
-        self.feature_root = feature_root
-        self.data_root = data_root
+        self.feature_root = feature_root   # <--- 新增
+        self.data_root = data_root         # <--- 新增
+        
+
+        print('Data sources: ', split.split(','))
         self.mode = mode
 
-        # 1) 根据 attack_mode 决定是否使用 poisoned 文件后缀
+        # --- 规范化 attack_mode，决定是否使用投毒数据 --- #
+        # 不要用“mode”以免和 self.mode 冲突
         attack_mode = getattr(self.args, "attack_mode", "none").lower()
         use_poison = attack_mode not in ("none", "noattack")
-        suffix = "_poisoned" if use_poison else ""
 
-        # 2) 加载 exp_splits{suffix}.pkl
-        exp_splits_path = os.path.join(self.data_root, self.split, f"exp_splits{suffix}.pkl")
-        exp_splits = load_pickle(exp_splits_path)
+  
+        # —— 根据 use_poison 选择加载原始或投毒后的 exp_splits —— #
+        exp_fname = "exp_splits_poisoned.pkl" if use_poison else "exp_splits.pkl"
+        exp_splits = load_pickle(os.path.join(self.data_root, self.split, exp_fname))
         if self.mode == 'train':
             self.exp_data = exp_splits['train']
         elif self.mode == 'val':
@@ -91,83 +87,97 @@ class VIP5_Dataset(Dataset):
         elif self.mode == 'test':
             self.exp_data = exp_splits['test']
         else:
-            raise NotImplementedError(f"Unknown mode: {self.mode}")
+            raise NotImplementedError
+           
+            
+        # —— DEBUG: 打印 exp_fname 和前 5 条 exp_data —— #
+        print(f"[DEBUG] exp_fname={exp_fname}")
+        print("[DEBUG] exp_data[:5]:", self.exp_data[:5])
 
-        # 3) 加载 sequential_data{suffix}.txt
-        seq_path = os.path.join(self.data_root, self.split, f"sequential_data{suffix}.txt")
-        self.sequential_data = ReadLineFromFile(seq_path)
 
-        # 4) 构建 user_items & 统计 item_count 用于采样
+        # —— 根据 use_poison 选择加载原始或投毒后的 sequential_data —— #
+        seq_fname = "sequential_data_poisoned.txt" if use_poison else "sequential_data.txt"
+        self.sequential_data = ReadLineFromFile(os.path.join(self.data_root, self.split, seq_fname))
+
+
+        # —— DEBUG: 打印前 5 条，确认切换是否生效 —— #
+        print(f"[DEBUG] attack_mode={attack_mode}, use_poison={use_poison}, seq_fname={seq_fname}")
+        print("[DEBUG] sequential_data[:5]:", self.sequential_data[:5])
+        print("[DEBUG] exp_data[:5]:", self.exp_data[:5])
+
+
         item_count = defaultdict(int)
-        user_items = {}
+        user_items = defaultdict()
         for line in self.sequential_data:
-            user, items_str = line.strip().split(' ', 1)
-            items = [int(x) for x in items_str.split()]
+            user, items = line.strip().split(' ', 1)
+            items = items.split(' ')
+            items = [int(item) for item in items]
             user_items[user] = items
-            for it in items:
-                item_count[it] += 1
+            for item in items:
+                item_count[item] += 1
         self.all_item = list(item_count.keys())
-        counts = np.array(list(item_count.values()), dtype=float)
-        self.probability = (counts / counts.sum()).tolist()
+        count = list(item_count.values())
+        sum_value = np.sum(count)
+        self.probability = [value / sum_value for value in count]
         self.user_items = user_items
-
-        # 如果是 test 模式，加载 negative_samples.txt
+        
         if self.mode == 'test':
-            neg_path = os.path.join(self.data_root, self.split, 'negative_samples.txt')
-            self.negative_samples = ReadLineFromFile(neg_path)
+            self.negative_samples = ReadLineFromFile(os.path.join(self.data_root, self.split, 'negative_samples.txt'))
+            
+        datamaps = load_json(os.path.join(self.data_root, self.split, 'datamaps.json'))
+        # 加载完 datamaps 之后，统一把 user2id 的所有 key 都转成 str
+        self.user2id = { str(k): v for k, v in datamaps['user2id'].items() }
+        self.item2id = datamaps['item2id']
+        self.user_list = list(datamaps['user2id'].keys())
+        self.item_list = list(datamaps['item2id'].keys())
+        self.id2item = datamaps['id2item']
+        
+        
+        
+        # 根据 use_poison 决定加载哪份映射：use_poison 时优先 poisoned，否则强制原始
+        poisoned_map = os.path.join(self.data_root, self.split, 'user_id2name_poisoned.pkl')
+        orig_map     = os.path.join(self.data_root, self.split, 'user_id2name.pkl')
 
-        # 5) 加载 user_id2idx{suffix}.pkl 和 user_id2name{suffix}.pkl
-        idx_path  = os.path.join(self.data_root, self.split, f"user_id2idx{suffix}.pkl")
-        name_path = os.path.join(self.data_root, self.split, f"user_id2name{suffix}.pkl")
-        if not os.path.exists(idx_path) or not os.path.exists(name_path):
-            raise FileNotFoundError(f"Missing mapping files for suffix '{suffix}' in {self.data_root}/{self.split}")
-        raw_user2id = load_pickle(idx_path)
+        if not use_poison:
+            if os.path.exists(orig_map):
+                print(f"[INFO] (NoAttack) 加载原始映射: {orig_map}")
+                self.user_id2name = load_pickle(orig_map)
+            else:
+                raise FileNotFoundError(f"找不到原始映射文件: {orig_map}")
+        else:
+            if os.path.exists(poisoned_map):
+                print(f"[INFO] 加载扩展映射: {poisoned_map}")
+                self.user_id2name = load_pickle(poisoned_map)
+            elif os.path.exists(orig_map):
+                print(f"[INFO] 加载原始映射: {orig_map}")
+                self.user_id2name = load_pickle(orig_map)
+            else:
+                raise FileNotFoundError(
+                    f"未在 {os.path.join(self.data_root, self.split)} 找到 user_id2name.pkl 或 user_id2name_poisoned.pkl"
+                )
 
 
-
-
-        self.user2id = { str(k): v for k, v in raw_user2id.items() }
-        # —— 5.1) 反向构建一个 list：下标 -> user_id —— #
-        self.user_list = [None] * len(self.user2id)
-        for uid, uidx in self.user2id.items():
-            self.user_list[uidx] = uid
-
-        # —— 5.2) 构建 direct 任务的“有效用户”列表 —— #
-        # 只保留那些在 sequential_data 中出现过、且有非空历史的用户
-        self.direct_user_list = [
-            uid for uid in self.user_list
-            if uid in self.user_items and len(self.user_items[uid]) > 0
-        ]
-
-
-        self.user_id2name = load_pickle(name_path)
-
-
-        # 6) 加载 datamaps.json，只取 item2id 和 id2item
-        datamaps = load_json(os.path.join(self.data_root, self.split, "datamaps.json"))
-        self.item2id = datamaps["item2id"]
-        self.id2item = datamaps["id2item"]
-
-        # 7) 根据 user_id2name 的 key 类型，确定转换函数
+        # 根据映射中第一个键的类型确定转换函数
         if self.user_id2name:
             first_key = next(iter(self.user_id2name))
             self.key_convert = int if isinstance(first_key, int) else str
         else:
             self.key_convert = str
 
-        # 8) 加载 meta.json.gz -> meta_data, 构建 meta_dict
-        self.meta_data = [m for m in parse(os.path.join(self.data_root, self.split, 'meta.json.gz'))]
-        self.meta_dict = { item['asin']: idx for idx, item in enumerate(self.meta_data) }
-
-        # 9) 加载 item2img_dict.pkl
+        self.meta_data = []
+        for meta in parse(os.path.join(self.data_root, self.split, 'meta.json.gz')):
+            self.meta_data.append(meta)
+        self.meta_dict = {}
+        for i, meta_item in enumerate(self.meta_data):
+            self.meta_dict[meta_item['asin']] = i
+            
+        # Visual features
         self.item2img_dict = load_pickle(os.path.join(self.data_root, self.split, 'item2img_dict.pkl'))
-
-        # 准备 datum_info 用于 __getitem__
+            
         print('compute_datum_info')
         self.total_length = 0
         self.datum_info = []
         self.compute_datum_info()
-
         
     def compute_datum_info(self):
         curr = 0
@@ -184,20 +194,14 @@ class VIP5_Dataset(Dataset):
                         self.datum_info.append((i + curr, key, i // self.sample_numbers[key][1]))
                     curr = self.total_length
             elif key == 'direct':
-                # 只用 direct_user_list 的长度来计算采样数，跳过那些根本没历史的用户
-                valid_n = len(self.direct_user_list)
-                # 第一组模板
                 if sum([0 < int(ind.split('-')[1]) <= 4 for ind in self.task_list[key]]):
-                    count = valid_n * self.sample_numbers[key][0]
-                    self.total_length += count
-                    for i in range(count):
+                    self.total_length += len(self.user2id) * self.sample_numbers[key][0]
+                    for i in range(self.total_length - curr):
                         self.datum_info.append((i + curr, key, i // self.sample_numbers[key][0]))
                     curr = self.total_length
-                # 第二组模板
                 if sum([4 < int(ind.split('-')[1]) <= 8 for ind in self.task_list[key]]):
-                    count = valid_n * self.sample_numbers[key][1]
-                    self.total_length += count
-                    for i in range(count):
+                    self.total_length += len(self.user2id) * self.sample_numbers[key][1]
+                    for i in range(self.total_length - curr):
                         self.datum_info.append((i + curr, key, i // self.sample_numbers[key][1]))
                     curr = self.total_length
             elif key == 'explanation':
@@ -394,15 +398,9 @@ class VIP5_Dataset(Dataset):
                 raise NotImplementedError
                 
         elif task_name == 'direct':
-
-            # 从 direct_user_list（而不是全 user_list）拿 user_id
-            user_id = self.direct_user_list[datum_idx]
-            # 保证 key_conversion 正确
-            uid = self.key_convert(user_id)
-            # 这个 user_id 一定在 user_items 里
-            seq_items = self.user_items.get(user_id, [])
-            # 全部转成字符串
-            sequence = [str(it) for it in seq_items]
+            sequential_datum = self.sequential_data[datum_idx]
+            sequence = sequential_datum.split()
+            user_id = sequence[0]
             uid = self.key_convert(user_id)
             if uid not in self.user_id2name:
                 print(f"[WARN] 用户ID {uid} 不在映射中，使用默认 placeholder")
@@ -410,26 +408,9 @@ class VIP5_Dataset(Dataset):
             else:
                 user_desc = self.user_id2name[uid]
             if self.mode == 'train':
-
-
-                # target_candidates = sequence[1:-2]
-                # target_idx = random.randint(0, len(target_candidates) - 1)
-                # target_item = target_candidates[target_idx]
-
-
-                # 先尝试正常切片
                 target_candidates = sequence[1:-2]
-                # 如果没有候选，就做最宽松的 fallback：
-                #  - 至少拿倒数第二个（若长度>=2），否则直接拿最后一个
-                if not target_candidates:
-                    if len(sequence) >= 2:
-                        target_candidates = [sequence[-2]]
-                    else:
-                        target_candidates = [sequence[-1]]
-                # 随机挑一个（此时列表至少有 1 个元素）
-                target_item = random.choice(target_candidates)
-
-
+                target_idx = random.randint(0, len(target_candidates) - 1)
+                target_item = target_candidates[target_idx]
             elif self.mode == 'val':
                 target_item = sequence[-2]
             elif self.mode == 'test':
