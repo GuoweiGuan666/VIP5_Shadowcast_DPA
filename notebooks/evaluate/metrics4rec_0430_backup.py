@@ -258,7 +258,7 @@ def ndcg_at_k(r, k, method=1):
     return dcg_at_k(r, k, method) / dcg_max
 
 
-def evaluate_once(topk_preds, groundtruth, target_items):
+def evaluate_once(topk_preds, groundtruth):
     """Evaluate one user performance.
     Args:
         topk_preds: list of <item_id>. length of the list is topK.
@@ -267,92 +267,90 @@ def evaluate_once(topk_preds, groundtruth, target_items):
         dict of metrics.
     """
     gt_set = set(groundtruth)
-    gt_set_ = set(target_items)  # for ER
     topk = len(topk_preds)
-    rel, rel_ = [], []
+    rel = []
     for iid in topk_preds:
         if iid in gt_set:
             rel.append(1)
         else:
             rel.append(0)
-        # For ER    
-        if iid in gt_set_:
-            rel_.append(1)
-        else:
-            rel_.append(0)
-
     return {
         "precision@k": precision_at_k(rel, topk),
         "recall@k": recall_at_k(rel, topk, len(gt_set)),
         "ndcg@k": ndcg_at_k(rel, topk, 1),
         "hit@k": hit_at_k(rel, topk),
         "ap": average_precision(rel),
-        'er@k': recall_at_k(rel_, topk, len(gt_set_)),
         "rel": rel,
     }
 
 
-def evaluate_all(user_item_scores, groudtruth, target_items, topk=10):
-    """Evaluate all user-items performance.
-    Args:
-        user_item_scores: dict with key = <item_id>, value = <user_item_score>.
-                     Make sure larger score means better recommendation.
-        groudtruth: dict with key = <user_id>, value = list of <item_id>.
-        topk: int
-    Returns:
+def evaluate_all(user_item_scores, groundtruth, topk=10, targeted_items=None):
     """
-    avg_prec, avg_recall, avg_ndcg, avg_hit, avg_er = 0.0, 0.0, 0.0, 0.0, 0.0
+    Evaluate all user-items performance.
+    Args:
+        user_item_scores: dict[user_id] -> dict[item_id, score]
+        groundtruth:       dict[user_id] -> list[item_id]
+        targeted_items:    (optional) dict[user_id] -> list[item_id]，用于计算 ER@K
+        topk:              int
+    Returns:
+        msg: str 打印用的汇总信息
+        res: dict 各项指标，包括 'er'
+    """
+    avg_prec = avg_recall = avg_ndcg = avg_hit = avg_er = 0.0
     rs = []
     cnt = 0
-    for uid in user_item_scores:
-        # [Important] Use shuffle to break ties!!!
-        ui_scores = list(user_item_scores[uid].items())
-        np.random.shuffle(ui_scores)  # break ties
-        # topk_preds = heapq.nlargest(topk, user_item_scores[uid], key=user_item_scores[uid].get)  # list of k <item_id>
-        topk_preds = heapq.nlargest(topk, ui_scores, key=lambda x: x[1]) # list of k tuples
-        topk_preds = [x[0] for x in topk_preds]  # list of k <item_id>
-        # print(topk_preds, groudtruth[uid])
-        result = evaluate_once(topk_preds, groudtruth[uid], target_items)
-        avg_prec += result["precision@k"]
-        avg_recall += result["recall@k"]
-        avg_ndcg += result["ndcg@k"]
-        avg_hit += result["hit@k"]
-        avg_er += result["er@k"]
+    for uid, ui_dict in user_item_scores.items():
+        # break ties
+        ui_scores = list(ui_dict.items())
+        np.random.shuffle(ui_scores)
+        # topk 推荐
+        topk_preds = heapq.nlargest(topk, ui_scores, key=lambda x: x[1])
+        topk_preds = [iid for iid, _ in topk_preds]
+
+        # 计算传统指标
+        result = evaluate_once(topk_preds, groundtruth.get(uid, []))
+        avg_prec  += result["precision@k"]
+        avg_recall+= result["recall@k"]
+        avg_ndcg  += result["ndcg@k"]
+        avg_hit   += result["hit@k"]
         rs.append(result["rel"])
+
+        # 计算 ER@K
+        if targeted_items and uid in targeted_items and len(targeted_items[uid])>0:
+            er = len(set(topk_preds) & set(targeted_items[uid])) / len(targeted_items[uid])
+        else:
+            er = 0.0
+        avg_er += er
+
         cnt += 1
 
-        # [CAVEAT] Following code calculates metrics for each gt item.
-        # for iid in groudtruth[uid]:
-        #     result = evaluate_once(topk_preds, [iid])
-        #     avg_prec += result["precision@k"]
-        #     avg_recall += result["recall@k"]
-        #     avg_ndcg += result["ndcg@k"]
-        #     avg_hit += result["hit@k"]
-        #     rs.append(result["rel"])
-        #     cnt += 1
+    # 求平均
+    avg_prec  /= cnt
+    avg_recall/= cnt
+    avg_ndcg  /= cnt
+    avg_hit   /= cnt
+    avg_er    /= cnt
 
-    avg_prec = avg_prec / cnt
-    avg_recall = avg_recall / cnt
-    avg_ndcg = avg_ndcg / cnt
-    avg_hit = avg_hit / cnt
-    avg_er = avg_er / cnt
     map_ = mean_average_precision(rs)
-    mrr = mean_reciprocal_rank(rs)
-    msg = "\nNDCG@{}\tRec@{}\tHits@{}\tPrec@{}\tMAP@{}\tMRR@{}\tER@{}".format(topk, topk, topk, topk, topk, topk, topk)
-    msg += "\n{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}\t{:.4f}".format(avg_ndcg, avg_recall, avg_hit, avg_prec, map_, mrr, avg_er)
-    # msg = "NDCG@{}\tRec@{}\tMAP@{}".format(topk, topk, topk)
-    # msg += "\n{:.4f}\t{:.4f}\t{:.4f}".format(avg_ndcg, avg_recall, map)
+    mrr  = mean_reciprocal_rank(rs)
+
+    msg = (
+        f"\nNDCG@{topk}\tRec@{topk}\tHits@{topk}\t"
+        f"Prec@{topk}\tMAP@{topk}\tMRR@{topk}\tER@{topk}\n"
+        f"{avg_ndcg:.4f}\t{avg_recall:.4f}\t{avg_hit:.4f}\t"
+        f"{avg_prec:.4f}\t{map_:.4f}\t{mrr:.4f}\t{avg_er:.4f}"
+    )
     print(msg)
-    res = {
+    return msg, {
         'ndcg': avg_ndcg,
-        'map': map_,
         'recall': avg_recall,
         'precision': avg_prec,
-        'mrr': mrr,
         'hit': avg_hit,
+        'map': map_,
+        'mrr': mrr,
         'er': avg_er,
     }
-    return msg, res
+
 
 
 def main():
@@ -370,7 +368,7 @@ def main():
         # 4: [12, 15],
         # 5: [11],
     }
-    evaluate_all(ui_scores, gt, {}, 5)
+    evaluate_all(ui_scores, gt, 5)
 
     # pred = {}
     # for uid in ui_scores:
