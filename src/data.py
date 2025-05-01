@@ -116,31 +116,48 @@ class VIP5_Dataset(Dataset):
             neg_path = os.path.join(self.data_root, self.split, 'negative_samples.txt')
             self.negative_samples = ReadLineFromFile(neg_path)
 
-        # 5) 加载 user_id2idx{suffix}.pkl 和 user_id2name{suffix}.pkl
+
+        # 5) 加载 user_id2idx{suffix}.pkl 和 user_id2name{suffix}.pkl（支持 NoAttack 模式回退）
         idx_path  = os.path.join(self.data_root, self.split, f"user_id2idx{suffix}.pkl")
         name_path = os.path.join(self.data_root, self.split, f"user_id2name{suffix}.pkl")
+
         if not os.path.exists(idx_path) or not os.path.exists(name_path):
-            raise FileNotFoundError(f"Missing mapping files for suffix '{suffix}' in {self.data_root}/{self.split}")
-        raw_user2id = load_pickle(idx_path)
+            if suffix == "":  # NoAttack 模式：根据 sequential_data + exp_data 动态生成
+                raw_user2id = {}
+                self.user_id2name = {}
+                # 1) 来自 sequential_data 的用户
+                for line in self.sequential_data:
+                    uid = line.split()[0]
+                    if uid not in raw_user2id:
+                        raw_user2id[uid] = len(raw_user2id)
+                        self.user_id2name[uid] = uid
+                # 2) 来自 explanation exp_data 的 reviewerID
+                for exp in self.exp_data:
+                    reviewer = exp.get("reviewerID")
+                    if reviewer not in raw_user2id:
+                        raw_user2id[reviewer] = len(raw_user2id)
+                        self.user_id2name[reviewer] = reviewer
+                print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射（含 sequential + explanation）")
+            else:
+                raise FileNotFoundError(
+                    f"Missing mapping files for suffix '{suffix}' in {self.data_root}/{self.split}"
+                )
+        else:
+            raw_user2id = load_pickle(idx_path)
+            self.user_id2name = load_pickle(name_path)
 
-
-
-
+        # 5.1) 构建 user2id 和 user_list
         self.user2id = { str(k): v for k, v in raw_user2id.items() }
-        # —— 5.1) 反向构建一个 list：下标 -> user_id —— #
         self.user_list = [None] * len(self.user2id)
         for uid, uidx in self.user2id.items():
             self.user_list[uidx] = uid
 
-        # —— 5.2) 构建 direct 任务的“有效用户”列表 —— #
-        # 只保留那些在 sequential_data 中出现过、且有非空历史的用户
+        # 5.2) 构建 direct 任务的“有效用户”列表
         self.direct_user_list = [
             uid for uid in self.user_list
             if uid in self.user_items and len(self.user_items[uid]) > 0
         ]
 
-
-        self.user_id2name = load_pickle(name_path)
 
 
         # 6) 加载 datamaps.json，只取 item2id 和 id2item
