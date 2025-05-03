@@ -11,17 +11,10 @@ fake_user_generator.py
   2) 计算当前最大 user_id，用于生成全局唯一的伪用户 ID
   3) 从原始序列中筛选出历史长度 >= min_history 的行为序列
   4) 为每个伪用户从筛选序列中随机抽取末端 min_history 条历史，再追加 target_item，保证样本充足
-  5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件
-  6) 读取并扩展 user_id2name.pkl，为每个伪用户分配占位名称，写入 user_id2name_poisoned.pkl
-
-使用示例：
-  python fake_user_generator.py \
-    --input  data/toys/sequential_data.txt \
-    --output data/toys/sequential_data_poisoned.txt \
-    --target_item 62 \
-    --fake_count 1941 \
-    --min_history 5
+  5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件（过滤掉短序列）
+  6) 读取并扩展用户映射，并将映射写入 poisoned 子目录，文件名带 <attack>_mr<mr> 后缀
 """
+
 import os
 import argparse
 import pickle
@@ -79,23 +72,18 @@ def generate_fake_lines(
 
     返回伪用户序列列表，每元素为格式化的字符串行。
     """
-    # 将每行拆分为 token 列表
     sequences = [line.split() for line in orig_lines]
-    # 过滤出有足够历史长度的候选序列
     candidates = [seq for seq in sequences if len(seq) - 1 >= min_history]
     if not candidates:
         raise RuntimeError(
             f"未找到历史长度 >= {min_history} 的行为序列，无法生成伪样本。"
         )
 
-    fake_lines: list[str] = []
+    fake_lines = []
     next_uid = max_user_id + 1
     for _ in range(fake_count):
-        # 随机挑选一个合规序列
         base_seq = random.choice(candidates)
-        # 使用末端 min_history 条历史
         history = base_seq[1:][-min_history:]
-        # 构造新序列：user_id + history + target_item
         new_seq = [str(next_uid)] + history + [str(target_item)]
         fake_lines.append(' '.join(new_seq))
         next_uid += 1
@@ -127,7 +115,19 @@ def main():
         "--min_history", type=int, default=5,
         help="每条伪用户序列保留的最少历史行为数，默认为 5"
     )
+    # 新增参数：attack_name 与 mr，用于映射文件命名
+    parser.add_argument(
+        "--attack-name", type=str, required=True,
+        help="攻击方法名称，用于映射文件后缀，如 direct_boost"
+    )
+    parser.add_argument(
+        "--mr", type=float, required=True,
+        help="投毒比例，用于映射文件后缀，如 0.1"
+    )
     args = parser.parse_args()
+
+    attack = args.attack_name
+    mr = args.mr
 
     # Step 1: 读取原始数据
     orig_lines = read_lines(args.input)
@@ -144,10 +144,11 @@ def main():
         args.min_history
     )
 
-    # Step 3: 合并并写入输出
+    # Step 3: 合并并过滤短序列 -> 写入输出
     merged = orig_lines + fake_lines
-    write_lines(args.output, merged)
-    print(f"[INFO] 合并后的数据已写入 {args.output}，共 {len(merged)} 行。")
+    filtered = [line for line in merged if len(line.split()) >= 4]
+    write_lines(args.output, filtered)
+    print(f"[INFO] 合并并过滤后的数据已写入 {args.output}，共 {len(filtered)} 行。")
 
     # Step 4: 扩展用户映射
     data_dir = os.path.dirname(args.input)
@@ -159,15 +160,19 @@ def main():
     with open(orig_map, 'rb') as f:
         uid2name = pickle.load(f)
 
-    # 为新伪用户分配占位用户名
+    # 新增映射条目
     for i in range(1, args.fake_count + 1):
-        uid2name[max_uid + i] = f"synthetic_user_{max_uid + i}"
+        uid = str(max_uid + i)
+        uid2name[uid] = f"synthetic_user_{uid}"
 
-    poisoned_map = os.path.join(data_dir, "user_id2name_poisoned.pkl")
-    with open(poisoned_map, 'wb') as f:
+    # 写入 poisoned 子目录，命名带 <attack>_mr<mr> 后缀
+    poison_dir = os.path.dirname(args.output)
+    os.makedirs(poison_dir, exist_ok=True)
+    suffix = f"_{attack}_mr{mr}"
+    map_path = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
+    with open(map_path, 'wb') as f:
         pickle.dump(uid2name, f)
-    print(f"[INFO] 扩展映射已写入 {poisoned_map}，共 {len(uid2name)} 条记录。")
+    print(f"[INFO] 扩展映射已写入 {map_path}，共 {len(uid2name)} 条记录。")
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

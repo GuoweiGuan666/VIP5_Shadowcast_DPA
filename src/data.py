@@ -13,6 +13,7 @@ from tqdm import tqdm
 import torch
 import numpy as np
 import os
+import yaml
 from torch.utils.data.distributed import DistributedSampler
 from copy import deepcopy
 
@@ -76,14 +77,54 @@ class VIP5_Dataset(Dataset):
         self.data_root = data_root
         self.mode = mode
 
-        # 1) 根据 attack_mode 决定是否使用 poisoned 文件后缀
-        attack_mode = getattr(self.args, "attack_mode", "none").lower()
-        use_poison = attack_mode not in ("none", "noattack")
-        suffix = "_poisoned" if use_poison else ""
 
-        # 2) 加载 exp_splits{suffix}.pkl
-        exp_splits_path = os.path.join(self.data_root, self.split, f"exp_splits{suffix}.pkl")
+
+        # 1) 从 config.yaml 里拿当前实验的 suffix/mr（由 run_finetune.sh 已写好）
+        cfg = yaml.safe_load(open("config.yaml"))
+        atk = cfg["experiment"]["suffix"]          # e.g. "RandomInjectionAttack" or "NoAttack"
+        mr  = cfg["experiment"]["mr"]              # e.g. 0.2 or 0
+
+
+        # 小工具：CamelCase -> snake_case，再去掉末尾 "_attack"
+        import re
+        def camel_to_snake(name):
+            s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+        atk_snake = camel_to_snake(str(atk)).replace("_attack", "")
+        mr_str    = str(mr).replace(".", "") if float(mr).is_integer() else str(mr)
+        # 还原原始小写，用于判断“无毒”两种写法
+        raw_atk = str(atk).lower()
+
+        # —— 根据 raw_atk 决定是否走“有毒”分支
+        if raw_atk not in ("none", "noattack"):
+
+            # —— 有毒文件都在 data/<split>/poisoned 下
+            pois_dir = os.path.join(self.data_root, self.split, "poisoned")
+            exp_splits_path = os.path.join(
+                pois_dir, f"exp_splits_{atk_snake}_mr{mr_str}.pkl"
+            )
+            seq_path = os.path.join(
+                pois_dir, f"sequential_data_{atk_snake}_mr{mr_str}.txt"
+            )
+            idx_path  = os.path.join(pois_dir, f"user_id2idx_{atk_snake}_mr{mr_str}.pkl")
+            name_path = os.path.join(pois_dir, f"user_id2name_{atk_snake}_mr{mr_str}.pkl")
+        else:
+            # —— NoAttack 时仍然读根目录下的无毒文件
+            exp_splits_path = os.path.join(self.data_root, self.split, "exp_splits.pkl")
+            seq_path        = os.path.join(self.data_root, self.split, "sequential_data.txt")
+            idx_path        = os.path.join(self.data_root, self.split, "user_id2idx.pkl")
+            name_path       = os.path.join(self.data_root, self.split, "user_id2name.pkl")
+
+        # —— DEBUG 打印，确认到底加载的是哪个文件
+        print(f"[DEBUG] exp_splits_path = {exp_splits_path}")
+        print(f"[DEBUG] seq_path        = {seq_path}")
+        print(f"[DEBUG] idx_path        = {idx_path}")
+        print(f"[DEBUG] name_path       = {name_path}")
+
+        # 加载 split / seq / user 映射
         exp_splits = load_pickle(exp_splits_path)
+
         if self.mode == 'train':
             self.exp_data = exp_splits['train']
         elif self.mode == 'val':
@@ -93,9 +134,13 @@ class VIP5_Dataset(Dataset):
         else:
             raise NotImplementedError(f"Unknown mode: {self.mode}")
 
-        # 3) 加载 sequential_data{suffix}.txt
-        seq_path = os.path.join(self.data_root, self.split, f"sequential_data{suffix}.txt")
+
+        # 3) 加载 sequential_data 文件
+        #    （路径已经在上面根据攻击模式和 mr 算好了）
         self.sequential_data = ReadLineFromFile(seq_path)
+
+
+
 
         # 4) 构建 user_items & 统计 item_count 用于采样
         item_count = defaultdict(int)
@@ -117,34 +162,34 @@ class VIP5_Dataset(Dataset):
             self.negative_samples = ReadLineFromFile(neg_path)
 
 
-        # 5) 加载 user_id2idx{suffix}.pkl 和 user_id2name{suffix}.pkl（支持 NoAttack 模式回退）
-        idx_path  = os.path.join(self.data_root, self.split, f"user_id2idx{suffix}.pkl")
-        name_path = os.path.join(self.data_root, self.split, f"user_id2name{suffix}.pkl")
-
+        # 5) 加载 user_id2idx/user_id2name 映射
+        #    （路径已经在上面根据攻击模式和 mr 算好了）
         if not os.path.exists(idx_path) or not os.path.exists(name_path):
-            if suffix == "":  # NoAttack 模式：根据 sequential_data + exp_data 动态生成
+            # 只有 NoAttack 时才允许动态 fallback，否则直接报错
+            if raw_atk in ("none", "noattack"):
                 raw_user2id = {}
                 self.user_id2name = {}
-                # 1) 来自 sequential_data 的用户
+                # 1) sequential_data 里的用户
                 for line in self.sequential_data:
                     uid = line.split()[0]
                     if uid not in raw_user2id:
                         raw_user2id[uid] = len(raw_user2id)
                         self.user_id2name[uid] = uid
-                # 2) 来自 explanation exp_data 的 reviewerID
+                # 2) explanation exp_data 里的 reviewerID
                 for exp in self.exp_data:
                     reviewer = exp.get("reviewerID")
                     if reviewer not in raw_user2id:
                         raw_user2id[reviewer] = len(raw_user2id)
                         self.user_id2name[reviewer] = reviewer
-                print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射（含 sequential + explanation）")
+                print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射")
             else:
                 raise FileNotFoundError(
-                    f"Missing mapping files for suffix '{suffix}' in {self.data_root}/{self.split}"
+                    f"Missing poisoned mapping files: {idx_path} or {name_path}"
                 )
         else:
-            raw_user2id = load_pickle(idx_path)
+            raw_user2id       = load_pickle(idx_path)
             self.user_id2name = load_pickle(name_path)
+
 
         # 5.1) 构建 user2id 和 user_list
         self.user2id = { str(k): v for k, v in raw_user2id.items() }

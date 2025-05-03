@@ -1,33 +1,26 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 verify_poisoned_data.py
 ========================
 
-该脚本用于验证一个或多个数据集的投毒数据文件是否符合预期。
+该脚本用于验证指定攻击下的投毒数据文件是否符合预期。
+只支持新版命名：sequential_data_<attack-name>_mr<mr>.txt
 
 主要功能：
-  1. 支持一次性验证多个数据集（如 beauty, clothing, sports, toys）。
-  2. 对比原始数据文件与投毒数据文件的行数差异，确认新增的虚假数据行数是否等于预期（原始行数 * POISON_RATIO）。
-  3. 检查新增的虚假数据行的格式是否正确，每行应至少包含用户ID和目标 itemID，并确保首尾字段为数字。
+  1. 对比原始数据文件与投毒数据文件的行数差异，确认新增行数等于原始行数 * MR。
+  2. 检查新增的伪用户交互数据行的格式，每行至少包含用户ID和目标 itemID，并确保首尾字段为数字。
 
 使用示例：
-    # 验证单个数据集（默认 10%）
-    python test/verify_poisoned_data.py --datasets beauty
-
-    # 同时验证多个数据集
-    python test/verify_poisoned_data.py --datasets beauty clothing sports toys
-
-    # 指定数据根目录和投毒比例（例如 5%）
-    python test/verify_poisoned_data.py \
-        --datasets beauty clothing \
-        --data_root data \
-        --ratio 0.05
+    # 验证 random_injection 攻击，MR=0.1
+    python test/verify_poisoned_data.py --datasets beauty clothing sports toys \
+        --data-root data --attack-name random_injection --mr 0.1
 
 参数说明：
-  --datasets  : 一个或多个数据集名称，对应 data_root/<name>/sequential_data*.txt
-  --data_root : 数据根目录，默认为 data/
-  --ratio     : 投毒比例，默认 0.1（即 10%）
+  --datasets   : 一个或多个数据集名称，对应 data_root/<name>/sequential_data.txt
+  --data-root  : 数据根目录，默认为 data/
+  --attack-name: 攻击方法名称，用于拼接投毒文件后缀，如 direct_boost, random_injection
+  --mr         : 投毒比例，如 0.1，用于计算期望增加行数及文件后缀
 
 退出码：
   0 表示所有验证通过；非 0 表示至少有一个数据集验证失败。
@@ -37,86 +30,87 @@ import argparse
 import os
 import sys
 
-# 与 batch_poison.py 保持一致的默认投毒比例
-POISON_RATIO = 0.1
 
-def read_lines(file_path: str):
-    """读取文件的所有行，并去除行尾的换行符"""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return [line.rstrip('\n') for line in f]
+def read_lines(path: str):
+    with open(path, 'r', encoding='utf-8') as f:
+        return [line.rstrip("\n") for line in f]
 
-def verify_poisoned_data(original_path: str, poisoned_path: str, expected_fake_count: int) -> bool:
-    original_lines = read_lines(original_path)
-    poisoned_lines = read_lines(poisoned_path)
-    
-    orig_cnt = len(original_lines)
-    pois_cnt = len(poisoned_lines)
+
+def verify_poisoned_data(orig_path: str, pois_path: str, expected_fake: int) -> bool:
+    orig = read_lines(orig_path)
+    pois = read_lines(pois_path)
+    orig_cnt = len(orig)
+    pois_cnt = len(pois)
     actual_fake = pois_cnt - orig_cnt
-    
-    print(f"[DATASET] 原始: {original_path}, 投毒: {poisoned_path}")
-    print(f"  原始行数: {orig_cnt}")
-    print(f"  投毒行数: {pois_cnt}")
-    print(f"  新增虚假行数: 实际 {actual_fake}, 期望 {expected_fake_count}")
-    
-    if actual_fake != expected_fake_count:
-        print("  [ERROR] 行数不符！")
+
+    print(f"[DATASET] 原始: {orig_path}, 投毒: {pois_path}")
+    print(f"  原始行数: {orig_cnt}, 投毒行数: {pois_cnt}")
+    print(f"  新增行数: 实际 {actual_fake}, 期望 {expected_fake}")
+
+    if actual_fake != expected_fake:
+        print("  [ERROR] 行数不匹配！")
         return False
-    
-    # 检查最后 expected_fake_count 条伪用户交互至少包含 用户ID 和 目标 ItemID
-    for idx, line in enumerate(poisoned_lines[-expected_fake_count:], start=1):
+
+    # 检查最后 expected_fake 条伪行格式
+    for i, line in enumerate(pois[-expected_fake:], start=1):
         tokens = line.split()
         if len(tokens) < 2:
-            print(f"  [ERROR] 第 {idx} 条伪行格式错误: “{line}” (需要至少 用户ID 和 目标 ItemID)")
+            print(f"  [ERROR] 第{i}条伪行字段不足: '{line}'")
             return False
         if not tokens[0].isdigit():
-            print(f"  [ERROR] 第 {idx} 条伪行首字段不是数字用户ID: “{tokens[0]}”")
+            print(f"  [ERROR] 第{i}条伪行首字段非数字用户ID: '{tokens[0]}'")
             return False
         if not tokens[-1].isdigit():
-            print(f"  [ERROR] 第 {idx} 条伪行末字段不是数字 ItemID: “{tokens[-1]}”")
+            print(f"  [ERROR] 第{i}条伪行末字段非数字ItemID: '{tokens[-1]}'")
             return False
-    
+
     print("  [OK] 格式与数量均符合预期。\n")
     return True
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="验证投毒数据文件是否符合预期（按比例自动计算 fake_count）。"
+        description="验证指定攻击方法下的投毒数据文件是否符合预期。"
     )
     parser.add_argument(
-        "--datasets", nargs="+", required=True,
-        help="一个或多个数据集名称，对应 data_root/<name>/sequential_data*.txt"
+        '--datasets', nargs='+', required=True,
+        help='数据集名称列表，对应 data_root/<name>/sequential_data.txt'
     )
     parser.add_argument(
-        "--data_root", type=str, default="data",
-        help="数据根目录，默认为 data/"
+        '--data-root', type=str, default='data',
+        help='数据根目录，默认为 data/'
     )
     parser.add_argument(
-        "--ratio", type=float, default=POISON_RATIO,
-        help=f"投毒比例，默认 {POISON_RATIO:.0%}"
+        '--attack-name', type=str, required=True,
+        help='攻击方法名称，用于拼接投毒文件后缀'
+    )
+    parser.add_argument(
+        '--mr', type=float, required=True,
+        help='投毒比例，如 0.1，用于期望值计算及文件后缀'
     )
     args = parser.parse_args()
 
     overall_ok = True
     for name in args.datasets:
-        orig = os.path.join(args.data_root, name, "sequential_data.txt")
-        pois = os.path.join(args.data_root, name, "sequential_data_poisoned.txt")
-        
-        if not os.path.exists(orig):
+        orig = os.path.join(args.data_root, name, 'sequential_data.txt')
+        suffix = f"_{args.attack_name}_mr{args.mr}"
+        pois = os.path.join(args.data_root, name, 'poisoned', f'sequential_data{suffix}.txt')
+
+        if not os.path.isfile(orig):
             print(f"[ERROR] 找不到原始文件: {orig}")
             overall_ok = False
             continue
-        if not os.path.exists(pois):
+        if not os.path.isfile(pois):
             print(f"[ERROR] 找不到投毒文件: {pois}")
             overall_ok = False
             continue
-        
-        orig_lines = read_lines(orig)
-        expected_fake = int(len(orig_lines) * args.ratio)
-        ok = verify_poisoned_data(orig, pois, expected_fake)
-        if not ok:
+
+        expected_fake = int(len(read_lines(orig)) * args.mr)
+        if not verify_poisoned_data(orig, pois, expected_fake):
             overall_ok = False
 
     sys.exit(0 if overall_ok else 1)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

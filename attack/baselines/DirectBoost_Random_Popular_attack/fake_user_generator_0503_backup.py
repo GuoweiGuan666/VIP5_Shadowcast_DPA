@@ -12,16 +12,10 @@ fake_user_generator.py
   3) 从原始序列中筛选出历史长度 >= min_history 的行为序列
   4) 为每个伪用户从筛选序列中随机抽取末端 min_history 条历史，再追加 target_item，保证样本充足
   5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件（过滤掉短序列）
-  6) 读取并扩展 user_id2name.pkl，为每个伪用户分配占位名称，写入 user_id2name_poisoned.pkl
-
-使用示例：
-  python fake_user_generator.py \
-    --input  data/toys/sequential_data.txt \
-    --output data/toys/sequential_data_poisoned.txt \
-    --target_item 62 \
-    --fake_count 1941 \
-    --min_history 5
+  6) 读取并扩展 user_id2name.pkl，为每个伪用户分配占位名称，写入 user_id2name_poisoned.pkl，
+     所有键都转换为字符串
 """
+
 import os
 import argparse
 import pickle
@@ -156,13 +150,16 @@ def main():
     with open(orig_map, 'rb') as f:
         uid2name = pickle.load(f)
 
+    # 使用字符串 key 保持一致
     for i in range(1, args.fake_count + 1):
-        uid2name[max_uid + i] = f"synthetic_user_{max_uid + i}"
+        uid = str(max_uid + i)
+        uid2name[uid] = f"synthetic_user_{uid}"
 
     poisoned_map = os.path.join(data_dir, "user_id2name_poisoned.pkl")
     with open(poisoned_map, 'wb') as f:
         pickle.dump(uid2name, f)
     print(f"[INFO] 扩展映射已写入 {poisoned_map}，共 {len(uid2name)} 条记录。")
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

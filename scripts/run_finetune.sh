@@ -9,7 +9,7 @@ set -euo pipefail
 # 使用方法：
 #   bash scripts/run_finetune.sh \
 #     <split>                \ # toys|clothing|beauty|sports
-#     <attack_mode>          \ # e.g. DirectBoostingAttack
+#     <attack_mode>          \ # e.g. DirectBoostingAttack   NoAttack  RandomInjectionAttack   PopularItemMimickingAttack 
 #     <mr>                   \ # e.g. 0.1
 #     <gpu_ids>              \ # 哪几张卡，例如 "0" 或 "0,1,2"
 #     <img_feat_type>        \ # vitb32|vitb16|rn50|…
@@ -28,7 +28,9 @@ set -euo pipefail
 #
 #   2 GPUs (卡 2,3）上 Fine‑tune toys 上的 NoAttack：
 #   bash scripts/run_finetune.sh toys NoAttack 0 2,3 vitb32 2 8 20
-
+#
+#   1 GPU（第 3 号卡）上 Fine‑tune toys 上的 RandomInjectionAttack：
+#   bash scripts/run_finetune.sh toys RandomInjectionAttack 0.1 3 vitb32 2 8 20
 #
 # 查看日志：
 #   tail -f log/toys/$(date +%m%d)/fine_tuning_logs/DirectBoostingAttack_0.1_3_toys-vitb32-2-8-20.out
@@ -89,7 +91,7 @@ OUT_NAME="${EXPERIMENT_TAG}_${split}-${img_feat_type}-${img_feat_ratio}-${reduct
 # 6. 启动训练
 echo "🚀 Launching training on ${ngpus} GPU(s)..."
 nohup bash scripts/train_VIP5.sh \
-  "${ngpus}" "${split}" 13579 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
+  "${ngpus}" "${split}" 23458 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
   > "${LOG_DIR}/${OUT_NAME}" 2>&1 &
   
 
