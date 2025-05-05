@@ -4,15 +4,6 @@ set -euo pipefail
 # run_attack_pipeline.sh
 # ----------------------
 # 一键执行指定攻击方法的全流程：
-# Usage:
-#   ./run_attack_pipeline.sh <attack-name> <mr>
-# Example:
-#   ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh random_injection 0.1
-
-
-# run_attack_pipeline.sh
-# ----------------------
-# 一键执行指定攻击方法的全流程：
 # 1) 加载并验证配置信息
 # 2) 生成行为投毒数据 (batch_poison)
 # 3) 生成解释投毒数据 (poison_exp_splits)
@@ -27,6 +18,8 @@ set -euo pipefail
 #   2. 在项目根目录下运行：
 #     ./run_attack_pipeline.sh <attack-name> <mr>
 #   例：./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh random_injection 0.1
+#       ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh direct_boost 0.1
+
 
 #   3. 如需再次运行所有单元测试：
 #    python -m unittest discover -s test

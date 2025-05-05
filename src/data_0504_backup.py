@@ -77,49 +77,44 @@ class VIP5_Dataset(Dataset):
         self.data_root = data_root
         self.mode = mode
 
-        # 1) 直接用命令行传入的 args.attack_mode 和 args.mr
-        atk = self.args.attack_mode       # e.g. "RandomInjectionAttack" / "NoAttack" / ...
-        mr  = self.args.mr                # e.g. 0.1, 0.2, etc.
 
 
+        # 1) 从 config.yaml 里拿当前实验的 suffix/mr（由 run_finetune.sh 已写好）
+        cfg = yaml.safe_load(open("config.yaml"))
+        atk = cfg["experiment"]["suffix"]          # e.g. "RandomInjectionAttack" or "NoAttack"
+        mr  = cfg["experiment"]["mr"]              # e.g. 0.2 or 0
 
-        # CamelCase -> snake_case，再去掉末尾 _attack
+
+        # 小工具：CamelCase -> snake_case，再去掉末尾 "_attack"
         import re
-        def camel_to_snake(name: str) -> str:
+        def camel_to_snake(name):
             s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
-        atk_snake = camel_to_snake(atk).replace("_attack", "")
-        # —— 把 "no" 也当作 NoAttack
-        if atk_snake == "no":
-            atk_snake = "noattack"
+        atk_snake = camel_to_snake(str(atk)).replace("_attack", "")
+        mr_str    = str(mr).replace(".", "") if float(mr).is_integer() else str(mr)
+        # 还原原始小写，用于判断“无毒”两种写法
+        raw_atk = str(atk).lower()
 
-        # —— alias 映射：脚本里用 DirectBoostingAttack，但文件夹里是 direct_boost
-        # ↓ 加入别名映射
-        if atk_snake == "direct_boosting":
-            atk_snake = "direct_boost"
+        # —— 根据 raw_atk 决定是否走“有毒”分支
+        if raw_atk not in ("none", "noattack"):
 
-
-        # 数字 MR 转字符串
-        # e.g. 0.1 -> "0.1", 0.2 -> "02"
-        mr_str = str(int(mr)) if float(mr).is_integer() else str(mr)
-
-        if atk_snake not in ("none", "noattack"):
-            # 有毒文件都在 data/<split>/poisoned 下
-            pois = os.path.join(self.data_root, self.split, "poisoned")
-            exp_splits_path = os.path.join(pois, f"exp_splits_{atk_snake}_mr{mr_str}.pkl")
-            seq_path        = os.path.join(pois, f"sequential_data_{atk_snake}_mr{mr_str}.txt")
-            idx_path        = os.path.join(pois, f"user_id2idx_{atk_snake}_mr{mr_str}.pkl")
-            name_path       = os.path.join(pois, f"user_id2name_{atk_snake}_mr{mr_str}.pkl")
+            # —— 有毒文件都在 data/<split>/poisoned 下
+            pois_dir = os.path.join(self.data_root, self.split, "poisoned")
+            exp_splits_path = os.path.join(
+                pois_dir, f"exp_splits_{atk_snake}_mr{mr_str}.pkl"
+            )
+            seq_path = os.path.join(
+                pois_dir, f"sequential_data_{atk_snake}_mr{mr_str}.txt"
+            )
+            idx_path  = os.path.join(pois_dir, f"user_id2idx_{atk_snake}_mr{mr_str}.pkl")
+            name_path = os.path.join(pois_dir, f"user_id2name_{atk_snake}_mr{mr_str}.pkl")
         else:
-            # NoAttack ：读取原始数据
-            base = os.path.join(self.data_root, self.split)
-            exp_splits_path = os.path.join(base, "exp_splits.pkl")
-            seq_path        = os.path.join(base, "sequential_data.txt")
-            idx_path        = os.path.join(base, "user_id2idx.pkl")
-            name_path       = os.path.join(base, "user_id2name.pkl")
-
-
+            # —— NoAttack 时仍然读根目录下的无毒文件
+            exp_splits_path = os.path.join(self.data_root, self.split, "exp_splits.pkl")
+            seq_path        = os.path.join(self.data_root, self.split, "sequential_data.txt")
+            idx_path        = os.path.join(self.data_root, self.split, "user_id2idx.pkl")
+            name_path       = os.path.join(self.data_root, self.split, "user_id2name.pkl")
 
         # —— DEBUG 打印，确认到底加载的是哪个文件
         print(f"[DEBUG] exp_splits_path = {exp_splits_path}")
@@ -171,7 +166,7 @@ class VIP5_Dataset(Dataset):
         #    （路径已经在上面根据攻击模式和 mr 算好了）
         if not os.path.exists(idx_path) or not os.path.exists(name_path):
             # 只有 NoAttack 时才允许动态 fallback，否则直接报错
-            if atk_snake in ("none", "noattack"):
+            if raw_atk in ("none", "noattack"):
                 raw_user2id = {}
                 self.user_id2name = {}
                 # 1) sequential_data 里的用户
@@ -327,32 +322,44 @@ class VIP5_Dataset(Dataset):
                 user_desc = self.user_id2name[uid]
 
 
+
+
             if self.mode == 'train':
+                # 修改点1：生成 end_candidates
+                end_candidates = list(range(
+                    max(2, len(sequence) - 6),
+                    len(sequence) - 3
+                ))
 
-                # —— 更健壮的切片策略 —— 
-                # 把 sequence 分解成 user_id + item 列表
-                _, *items = sequence
-                L = len(items)
+                # 修改点2：fallback 并打印 datum_idx（而非 idx）
+                if not end_candidates:
+                    print(f"[ERROR] datum_idx={datum_idx} 无合法 end_candidates，"
+                          f"sequence={sequence!r}")
+                    # fallback：取倒数第二个位置保证不越界
+                    end_candidates = [len(sequence) - 2]
 
-                # 0 个 item：随机从全集里取一个当 target，history 保持空
-                if L == 0:
-                    history = []
-                    target  = random.choice(self.all_item)
-                elif L == 1:
-                    # 只有 1 个 item：history 仍然留空，target=它自己
-                    history = []
-                    target  = items[0]
-                else:
-                    # >=2 个 item：随机选择 history 长度 hlen ∈ [1, min(6, L-1)]
-                    max_h = min(6, L - 1)
-                    hlen  = random.randint(1, max_h)
-                    end_idx   = random.randint(hlen - 1, L - 2)
-                    start_idx = end_idx - hlen + 1
-                    history   = items[start_idx : end_idx + 1]
-                    target    = items[end_idx + 1]
+                # 修改点3：直接选出 end_pos
+                end_pos = random.choice(end_candidates)
 
-                purchase_history = [str(x) for x in history]
-                target_item      = str(target)
+
+
+                # 修改点4：同样为 start_candidates 增加 fallback
+                start_candidates = list(range(1, min(4, end_pos)))
+                if not start_candidates:
+                    print(f"[ERROR] datum_idx={datum_idx} 无合法 start_candidates，"
+                          f"end_pos={end_pos}")
+                    start_candidates = [1]
+                start_pos = random.choice(start_candidates)
+
+
+                purchase_history = sequence[start_pos : end_pos + 1]
+                target_item     = sequence[end_pos + 1]
+
+
+
+
+
+
 
             elif self.mode == 'val':
                 purchase_history = sequence[1:-2]
@@ -464,9 +471,6 @@ class VIP5_Dataset(Dataset):
                 user_desc = f"synthetic_user_{uid}"
             else:
                 user_desc = self.user_id2name[uid]
-
-
-
             if self.mode == 'train':
 
 

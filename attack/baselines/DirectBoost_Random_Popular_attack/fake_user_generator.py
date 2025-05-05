@@ -3,16 +3,23 @@
 """
 fake_user_generator.py
 ======================
-本模块用于在 VIP5 多模态推荐系统中实现 Direct Boosting Attack，
-通过生成具有合理历史行为序列的伪用户交互数据对目标物品进行数据投毒，并同步扩展用户映射。
+本模块用于在 VIP5 多模态推荐系统中实现以下多种数据投毒攻击：
+  - Direct Boosting Attack
+  - Random Injection Attack
+  - Popular Item Mimicking Attack (future)
 
 功能：
   1) 读取原始 sequential_data.txt，每行格式为：<user_id> <item1> <item2> ...
   2) 计算当前最大 user_id，用于生成全局唯一的伪用户 ID
-  3) 从原始序列中筛选出历史长度 >= min_history 的行为序列
-  4) 为每个伪用户从筛选序列中随机抽取末端 min_history 条历史，再追加 target_item，保证样本充足
-  5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件（过滤掉短序列）
-  6) 读取并扩展用户映射，并将映射写入 poisoned 子目录，文件名带 <attack>_mr<mr> 后缀
+  3) 根据 attack_mode，不同策略生成伪用户行为序列：
+     - direct_boost：每个伪用户仅包含 target_item
+     - random_injection：截取历史序列末端，再追加 target_item
+     - popular_mimicking：（预留）
+  4) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件
+     - direct_boost: 保留至少2列
+     - 其他模式: 保留至少4列
+  5) 读取并扩展用户映射，并将映射写入 poisoned 子目录，
+     文件名带 <attack>_mr<mr> 后缀
 """
 
 import os
@@ -64,12 +71,11 @@ def generate_fake_lines(
     min_history: int = 5
 ) -> list[str]:
     """
-    为伪用户生成行为序列：
+    Random Injection Attack:
       - 从原始数据中挑选出历史长度 >= min_history 的序列
-      - 随机抽取一条，截取其末端 min_history 条行为作为历史
+      - 随机选取一条，截取末端 min_history 条行为作为历史
       - 在历史后追加 target_item，组成新用户序列
       - user_id 依次递增，保证全局唯一
-
     返回伪用户序列列表，每元素为格式化的字符串行。
     """
     sequences = [line.split() for line in orig_lines]
@@ -115,7 +121,6 @@ def main():
         "--min_history", type=int, default=5,
         help="每条伪用户序列保留的最少历史行为数，默认为 5"
     )
-    # 新增参数：attack_name 与 mr，用于映射文件命名
     parser.add_argument(
         "--attack-name", type=str, required=True,
         help="攻击方法名称，用于映射文件后缀，如 direct_boost"
@@ -135,32 +140,40 @@ def main():
     if max_uid < 0:
         raise ValueError("无法从输入文件中解析出任何 user_id，请检查数据格式。")
 
-    # Step 2: 生成伪数据行
-    fake_lines = generate_fake_lines(
-        orig_lines,
-        max_uid,
-        args.target_item,
-        args.fake_count,
-        args.min_history
-    )
+    # Step 2: 根据 attack_name 分支生成伪数据行
+    if attack == "direct_boost":
+        # --- Direct Boost Attack: 每个伪用户仅包含 target_item ---
+        fake_lines = [f"{max_uid + i + 1} {args.target_item}" for i in range(args.fake_count)]
+    else:
+        # Random Injection & other modes: 使用随机历史截取 + 追加逻辑
+        fake_lines = generate_fake_lines(
+            orig_lines,
+            max_uid,
+            args.target_item,
+            args.fake_count,
+            args.min_history
+        )
 
     # Step 3: 合并并过滤短序列 -> 写入输出
     merged = orig_lines + fake_lines
-    filtered = [line for line in merged if len(line.split()) >= 4]
+    if attack == "direct_boost":
+        filtered = [line for line in merged if len(line.split()) >= 2]
+    else: 
+        filtered = [line for line in merged if len(line.split()) >= 4]
     write_lines(args.output, filtered)
     print(f"[INFO] 合并并过滤后的数据已写入 {args.output}，共 {len(filtered)} 行。")
 
     # Step 4: 扩展用户映射
     data_dir = os.path.dirname(args.input)
     orig_map = os.path.join(data_dir, "user_id2name.pkl")
-    if not os.path.exists(orig_map):
+    if os.path.exists(orig_map):
+        with open(orig_map, 'rb') as f:
+            uid2name = pickle.load(f)
+    else:
         print(f"[WARN] 原始映射 {orig_map} 不存在，跳过映射扩展。")
         return
 
-    with open(orig_map, 'rb') as f:
-        uid2name = pickle.load(f)
-
-    # 新增映射条目
+    # 追加 synthetic_user 映射
     for i in range(1, args.fake_count + 1):
         uid = str(max_uid + i)
         uid2name[uid] = f"synthetic_user_{uid}"

@@ -6,6 +6,7 @@ test_fake_user_generator.py
 针对 fake_user_generator.py 的单元和 CLI 测试：
 - 功能测试 read_lines, get_max_user_id, generate_fake_lines
 - CLI 端到端：验证行过滤逻辑 & 映射扩展
+- Direct Boost Attack 分支测试
 """
 import unittest
 import tempfile
@@ -75,9 +76,8 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-
     def test_cli_outputs(self):
-        # use a poisoned/ subfolder and suffix
+        # random_injection 分支: 因过滤阈值，最终只保留原始数据
         attack = "atk"
         mr = "0.1"
         poison_dir = self.data / "poisoned"
@@ -93,25 +93,58 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
             "--attack-name", attack,
             "--mr", mr
         ]
-
-
         p = subprocess.run(cmd, cwd=str(self.tmp),
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.assertEqual(p.returncode, 0, msg=p.stderr)
 
-        # 由于过滤掉少于4 token 的行，CLI 最终只保留原始数据
         lines = out_seq.read_text().splitlines()
         self.assertListEqual(lines, self.orig)
 
-        # mapping should be in poisoned/ with our suffix
         mfile = poison_dir / f"user_id2name_{attack}_mr{mr}.pkl"
         self.assertTrue(mfile.exists(), f"{mfile} 不存在")
         mp = pickle.load(open(mfile, "rb"))
-
         self.assertEqual(mp["1"], "u1")
         self.assertEqual(mp["2"], "u2")
         self.assertIn("3", mp)
         self.assertTrue(mp["3"].startswith("synthetic_user_"))
+
+    def test_cli_direct_boost(self):
+        # Direct Boost Attack: 新伪用户仅含 target_item，应被保留
+        attack = "direct_boost"
+        mr = "0.2"
+        poison_dir = self.data / "poisoned"
+        poison_dir.mkdir(exist_ok=True)
+        out_seq = poison_dir / f"sequential_data_{attack}_mr{mr}.txt"
+        cmd = [
+            sys.executable, str(self.script),
+            "--input",  str(self.data / "sequential_data.txt"),
+            "--output", str(out_seq),
+            "--target_item", "42",
+            "--fake_count", "2",
+            "--attack-name", attack,
+            "--mr", mr
+        ]
+        p = subprocess.run(cmd, cwd=str(self.tmp),
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(p.returncode, 0, msg=p.stderr)
+
+        lines = out_seq.read_text().splitlines()
+        # 应包含原始2行 + 2条伪用户记录
+        self.assertEqual(len(lines), 4)
+        # 验证新行格式为 "<uid> 42"
+        new_lines = lines[2:]
+        expected_uids = ["3", "4"]
+        for uid, nl in zip(expected_uids, new_lines):
+            parts = nl.split()
+            self.assertEqual(parts, [uid, "42"]);
+
+        # mapping 中应包含 uid 3,4
+        mfile = poison_dir / f"user_id2name_{attack}_mr{mr}.pkl"
+        self.assertTrue(mfile.exists(), f"{mfile} 不存在")
+        mp = pickle.load(open(mfile, "rb"))
+        for uid in expected_uids:
+            self.assertIn(uid, mp)
+            self.assertTrue(mp[uid].startswith("synthetic_user_"))
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@
 """
 fake_user_generator.py
 ======================
-本模块用于在 VIP5 多模态推荐系统中实现 Direct Boosting Attack，
+本模块用于在 VIP5 多模态推荐系统中实现 Direct Boosting ,Random injection, popular Attack，
 通过生成具有合理历史行为序列的伪用户交互数据对目标物品进行数据投毒，并同步扩展用户映射。
 
 功能：
@@ -12,14 +12,14 @@ fake_user_generator.py
   3) 从原始序列中筛选出历史长度 >= min_history 的行为序列
   4) 为每个伪用户从筛选序列中随机抽取末端 min_history 条历史，再追加 target_item，保证样本充足
   5) 将伪用户序列追加到原数据后，输出到新的 poisoned 文本文件（过滤掉短序列）
-  6) 读取并扩展 user_id2name.pkl，为每个伪用户分配占位名称，写入 user_id2name_poisoned.pkl，
-     所有键都转换为字符串
+  6) 读取并扩展用户映射，并将映射写入 poisoned 子目录，文件名带 <attack>_mr<mr> 后缀
 """
 
 import os
 import argparse
 import pickle
 import random
+
 
 def read_lines(file_path: str) -> list[str]:
     """
@@ -72,16 +72,14 @@ def generate_fake_lines(
 
     返回伪用户序列列表，每元素为格式化的字符串行。
     """
-    # 将每行拆分为 token 列表
     sequences = [line.split() for line in orig_lines]
-    # 过滤出有足够历史长度的候选序列
     candidates = [seq for seq in sequences if len(seq) - 1 >= min_history]
     if not candidates:
         raise RuntimeError(
             f"未找到历史长度 >= {min_history} 的行为序列，无法生成伪样本。"
         )
 
-    fake_lines: list[str] = []
+    fake_lines = []
     next_uid = max_user_id + 1
     for _ in range(fake_count):
         base_seq = random.choice(candidates)
@@ -117,7 +115,19 @@ def main():
         "--min_history", type=int, default=5,
         help="每条伪用户序列保留的最少历史行为数，默认为 5"
     )
+    # 新增参数：attack_name 与 mr，用于映射文件命名
+    parser.add_argument(
+        "--attack-name", type=str, required=True,
+        help="攻击方法名称，用于映射文件后缀，如 direct_boost"
+    )
+    parser.add_argument(
+        "--mr", type=float, required=True,
+        help="投毒比例，用于映射文件后缀，如 0.1"
+    )
     args = parser.parse_args()
+
+    attack = args.attack_name
+    mr = args.mr
 
     # Step 1: 读取原始数据
     orig_lines = read_lines(args.input)
@@ -150,16 +160,19 @@ def main():
     with open(orig_map, 'rb') as f:
         uid2name = pickle.load(f)
 
-    # 使用字符串 key 保持一致
+    # 新增映射条目
     for i in range(1, args.fake_count + 1):
         uid = str(max_uid + i)
         uid2name[uid] = f"synthetic_user_{uid}"
 
-    poisoned_map = os.path.join(data_dir, "user_id2name_poisoned.pkl")
-    with open(poisoned_map, 'wb') as f:
+    # 写入 poisoned 子目录，命名带 <attack>_mr<mr> 后缀
+    poison_dir = os.path.dirname(args.output)
+    os.makedirs(poison_dir, exist_ok=True)
+    suffix = f"_{attack}_mr{mr}"
+    map_path = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
+    with open(map_path, 'wb') as f:
         pickle.dump(uid2name, f)
-    print(f"[INFO] 扩展映射已写入 {poisoned_map}，共 {len(uid2name)} 条记录。")
-
+    print(f"[INFO] 扩展映射已写入 {map_path}，共 {len(uid2name)} 条记录。")
 
 if __name__ == '__main__':
     main()
