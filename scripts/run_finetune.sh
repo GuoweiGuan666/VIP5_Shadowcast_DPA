@@ -91,7 +91,7 @@ OUT_NAME="${EXPERIMENT_TAG}_${split}-${img_feat_type}-${img_feat_ratio}-${reduct
 # 6. 启动训练
 echo "🚀 Launching training on ${ngpus} GPU(s)..."
 nohup bash scripts/train_VIP5.sh \
-  "${ngpus}" "${split}" 13459 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
+  "${ngpus}" "${split}" 13668 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
   > "${LOG_DIR}/${OUT_NAME}" 2>&1 &
   
 

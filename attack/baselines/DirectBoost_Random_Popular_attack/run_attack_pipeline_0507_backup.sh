@@ -37,50 +37,43 @@ if [ $# -lt 2 ]; then
   echo "Usage: $0 <attack-name> <mr> [param]"
   exit 1
 fi
-
-ATTACK=$1
-MR=$2
-PARAM=${3:-}
-
+ATTACK=$1; MR=$2; PARAM=${3:-}
+SUFFIX="${ATTACK}_mr${MR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 调整到项目根目录（上溯三层）
 ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT"
 
 echo "[0/7] Attack: $ATTACK, MR: $MR, Param: ${PARAM:-none}"
 
 # 1) 验证配置
-echo "[1/7] 验证配置加载"
 python src/param.py --config config.yaml
 
-# 2) 生成行为投毒数据
 echo "[2/7] 生成行为投毒数据: $ATTACK"
 for DS in toys beauty clothing sports; do
   POP_F="analysis/results/${DS}/high_pop_items_${DS}_highcount_100.txt"
   CMD="python attack/baselines/DirectBoost_Random_Popular_attack/batch_poison.py \
-    --dataset ${DS} \
-    --attack-name ${ATTACK} \
-    --mr ${MR}"
+    --attack-name '$ATTACK' --mr '$MR'"
   if [ "$ATTACK" = "popular_mimicking" ]; then
-    CMD+=" --pop-file ${POP_F}"
-    [ -n "$PARAM" ] && CMD+=" --pop-k ${PARAM}"
+    CMD+=" --pop-file $POP_F"
+    [ -n "$PARAM" ] && CMD+=" --pop-k $PARAM"
   elif [ "$ATTACK" = "random_injection" ]; then
-    [ -n "$PARAM" ] && CMD+=" --hist-min ${PARAM}"
+    [ -n "$PARAM" ] && CMD+=" --hist-min $PARAM"
   fi
   echo "> $CMD"
   eval $CMD
-  echo "  * ${DS} done"
+  echo "  * $DS done"
 done
 
 # 3) 生成解释投毒数据
-echo "[3/7] 生成解释投毒数据"
 python attack/baselines/DirectBoost_Random_Popular_attack/poison_exp_splits.py \
   --data-root data \
   --datasets toys,beauty,clothing,sports \
   --target-asins \
     toys:B000P6Q7ME,beauty:B004ZT0SSG,clothing:B001LK3DAW,sports:B0000C52L6 \
   --splits train \
-  --attack-name "${ATTACK}" \
-  --mr "${MR}" \
+  --attack-name "$ATTACK" \
+  --mr "$MR" \
   --overall-distribution "[4.0,5.0]" \
   --helpful-range "[1,3]" \
   --features "['design','quality','value']" \
@@ -89,28 +82,23 @@ python attack/baselines/DirectBoost_Random_Popular_attack/poison_exp_splits.py \
   --seed 42
 
 # 4) 构建虚假用户映射
-echo "[4/7] 构建虚假用户映射"
 for DS in toys beauty clothing sports; do
   python attack/baselines/DirectBoost_Random_Popular_attack/generate_user_mappings.py \
-    --attack-name "${ATTACK}" \
-    --mr "${MR}" \
-    --exp-splits data/${DS}/poisoned/exp_splits_${ATTACK}_mr${MR}.pkl \
-    --seq-file  data/${DS}/poisoned/sequential_data_${ATTACK}_mr${MR}.txt \
-    --name-map data/${DS}/poisoned/user_id2name_${ATTACK}_mr${MR}.pkl \
-    --output-dir data/${DS}/poisoned
-  echo "  * ${DS} mapping generated"
+    --attack-name "$ATTACK" \
+    --mr "$MR" \
+    --exp-splits data/$DS/poisoned/exp_splits_${SUFFIX}.pkl \
+    --seq-file    data/$DS/poisoned/sequential_data_${SUFFIX}.txt \
+    --name-map    data/$DS/poisoned/user_id2name_${SUFFIX}.pkl \
+    --output-dir  data/$DS/poisoned
+  echo "  * $DS mapping generated"
 done
 
 # 5) 运行单元测试与集成测试
-echo "[5/7] 运行单元测试与集成测试"
 python -m unittest discover -s test
 
 # 6) 验证投毒数据
-echo "[6/7] 验证投毒结果"
-python test/verify_poisoned_data.py \
-  --datasets toys beauty clothing sports \
-  --attack-name "${ATTACK}" \
-  --mr "${MR}"
+python test/verify_poisoned_data.py --datasets toys beauty clothing sports \
+    --attack-name "$ATTACK" --mr "$MR"
 
 # 7) 完成
-echo "[7/7] 全流程完成: ${ATTACK} MR=${MR} Param=${PARAM:-none}！"
+echo "[7/7] $ATTACK (MR=$MR) 全流程完成！"

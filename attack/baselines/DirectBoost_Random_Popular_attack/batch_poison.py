@@ -1,113 +1,94 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 batch_poison.py
 ===============
-
-批量对多个数据集运行指定攻击方法的投毒脚本，按照“原始数据行数的 MR%”来生成虚假用户数据。
-
-本脚本会自动调用 fake_user_generator.py，为每个指定的数据集：
-  1. 计算原始 sequential_data.txt 的总行数 N
-  2. 计算 fake_count = int(N * MR)
-  3. 生成投毒数据并更新映射
-
-使用说明：
-    1. 确保 fake_user_generator.py 已按上面修改并位于本目录下。
-    2. 在项目根目录执行：
-         python attack/baselines/direct_boost_attack/batch_poison.py \
-           --attack-name direct_boost --mr 0.1
-    3. 可替换 --attack-name 为 other_baseline，--mr 为其他比例，如 0.2 表示 20%。
+批量对多个数据集运行指定攻击方法的投毒脚本。
+新增：支持可选 --dataset；不传时回退到对 ['beauty','clothing','sports','toys'] 循环投毒。
 """
-
 import argparse
 import subprocess
-import sys
 import os
+import sys
 
-# 默认投毒比例 10%
-DEFAULT_MR = 0.1
-
-def count_lines(file_path):
-    """统计文件总行数"""
-    with open(file_path, 'r', encoding='utf-8') as f:
+def count_lines(path):
+    with open(path, 'r', encoding='utf-8') as f:
         return sum(1 for _ in f)
 
-# ---- 更新：增加 attack_name 和 mr 参数传递 ----
-def run_poison(input_path, output_path, target_item, fake_count, attack_name, mr):
-    """调用 fake_user_generator.py 执行单个数据集的投毒"""
-    script_dir = os.path.dirname(__file__)
+def run_poison(inp, out, tgt, fc, atk, mr, pop=None, popk=None, hmin=None, hmax=None):
+    here = os.path.dirname(__file__)
     cmd = [
         sys.executable,
-        os.path.join(script_dir, "fake_user_generator.py"),
-        "--input", input_path,
-        "--output", output_path,
-        "--target_item", target_item,
-        "--fake_count", str(fake_count),
-        "--attack-name", attack_name,
-        "--mr", str(mr)
+        os.path.join(here, 'fake_user_generator.py'),
+        '--input', inp,
+        '--output', out,
+        '--target_item', str(tgt),
+        '--fake_count', str(fc),
+        '--attack-name', atk,
+        '--mr', str(mr)
     ]
-    print("进程调用:", " ".join(cmd))
-    p = subprocess.run(cmd, text=True, capture_output=True)
-    if p.returncode != 0:
-        print(f"[ERROR] 投毒失败：{input_path}\n{p.stderr}")
+    if pop:
+        cmd += ['--pop-file', pop]
+    if popk is not None:
+        cmd += ['--pop-k', str(popk)]
+    if atk == 'random_injection':
+        if hmin is not None:
+            cmd += ['--hist-min', str(hmin)]
+        if hmax is not None:
+            cmd += ['--hist-max', str(hmax)]
+    print('进程调用:', ' '.join(cmd))
+    r = subprocess.run(cmd, text=True, capture_output=True)
+    if r.returncode != 0:
+        print(f"[ERROR] {inp} 投毒失败\n{r.stderr}", file=sys.stderr)
     else:
-        print(p.stdout)
-
+        print(r.stdout)
 
 def main():
     parser = argparse.ArgumentParser(
-        description="批量对多个数据集运行指定攻击方法的投毒脚本"
+        description="对单个或多个数据集运行指定攻击方法的行为投毒"
     )
-    parser.add_argument(
-        "--attack-name", required=True,
-        help="投毒方法名称，用于输出文件后缀，如 direct_boost"
-    )
-    parser.add_argument(
-        "--mr", type=float, default=DEFAULT_MR,
-        help="投毒比例，如 0.1 表示 10%"
-    )
+    parser.add_argument('--dataset',
+                        choices=['beauty','clothing','sports','toys'],
+                        default=None,
+                        help='若指定，则只投毒该子数据集；否则默认对所有四个子数据集循环投毒')
+    parser.add_argument('--attack-name', required=True,
+                        help='投毒方法名称')
+    parser.add_argument('--mr', type=float, default=0.1,
+                        help='投毒比例')
+    parser.add_argument('--pop-file', default=None,
+                        help='popular_mimicking 模式下的热门列表文件')
+    parser.add_argument('--pop-k', type=int, default=None,
+                        help='popular_mimicking 模式下取前 K 热门')
+    parser.add_argument('--hist-min', type=int, default=None,
+                        help='random_injection 模式下最小历史长度')
+    parser.add_argument('--hist-max', type=int, default=None,
+                        help='random_injection 模式下最大历史长度')
     args = parser.parse_args()
 
-    attack = args.attack_name
-    mr = args.mr
+    # 数据集→目标 item_id 映射
+    target_map = {'beauty':2, 'clothing':8, 'sports':53, 'toys':62}
+    # 如果没指定 dataset，就对所有 key 循环；否则只处理一个
+    ds_list = [args.dataset] if args.dataset else list(target_map.keys())
 
-    datasets = [
-        {"name": "beauty",   "target_item": "2"},
-        {"name": "clothing", "target_item": "8"},
-        {"name": "sports",   "target_item": "53"},
-        {"name": "toys",     "target_item": "62"},
-    ]
+    for ds in ds_list:
+        inp = os.path.join('data', ds, 'sequential_data.txt')
+        if not os.path.exists(inp):
+            print(f"[WARN] 缺失 {inp}，跳过", file=sys.stderr)
+            continue
+        od = os.path.join('data', ds, 'poisoned')
+        os.makedirs(od, exist_ok=True)
+        out = os.path.join(od, f'sequential_data_{args.attack_name}_mr{args.mr}.txt')
 
-    for ds in datasets:
-        name = ds["name"]
-        print(f"\n==== 开始处理：{name} ====")
-        data_dir   = os.path.join("data", name)
-        input_path = os.path.join(data_dir, "sequential_data.txt")
+        total = count_lines(inp)
+        fake_count = int(total * args.mr)
+        print(f"[INFO] {ds} 原始行数: {total}, MR={args.mr} => 生成 {fake_count} 条伪数据")
 
-        # —— 在各子数据集下创建 poisoned 子目录 ——
-        poison_dir = os.path.join(data_dir, "poisoned")
-        os.makedirs(poison_dir, exist_ok=True)
-
-        # 输出文件放到 poisoned 子目录，并带 <attack>_mr<mr> 后缀
-        output_path = os.path.join(
-            poison_dir,
-            f"sequential_data_{attack}_mr{mr}.txt"
+        run_poison(
+            inp, out, target_map[ds], fake_count,
+            args.attack_name, args.mr,
+            args.pop_file, args.pop_k,
+            args.hist_min, args.hist_max
         )
 
-        target_item = ds["target_item"]
-
-        # 1) 校验输入文件
-        if not os.path.exists(input_path):
-            print(f"[WARN] 找不到文件 {input_path}，跳过")
-            continue
-
-        # 2) 统计并计算伪用户数量
-        total = count_lines(input_path)
-        fake_count = int(total * mr)
-        print(f"[INFO] 原始行数：{total}, {mr*100}% => 生成 {fake_count} 条虚假数据")
-
-        # 3) 调用投毒脚本
-        run_poison(input_path, output_path, target_item, fake_count, attack, mr)
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

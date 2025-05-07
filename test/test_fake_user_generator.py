@@ -59,6 +59,7 @@ class TestFakeUserGeneratorFunctions(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             generate_fake_lines(self.lines, 3, 99, 1, min_history=100)
 
+
 class TestFakeUserGeneratorCLI(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -70,8 +71,10 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
         # 准备原始映射
         with open(self.data / "user_id2name.pkl", "wb") as f:
             pickle.dump({"1": "u1", "2": "u2"}, f)
-        self.script = (Path(__file__).resolve().parent.parent /
-                       "attack/baselines/DirectBoost_Random_Popular_attack/fake_user_generator.py")
+        self.script = (
+            Path(__file__).resolve().parent.parent /
+            "attack/baselines/DirectBoost_Random_Popular_attack/fake_user_generator.py"
+        )
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
@@ -89,7 +92,7 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
             "--output", str(out_seq),
             "--target_item", "99",
             "--fake_count", "1",
-            "--min_history", "1",
+            "--hist-min", "1",
             "--attack-name", attack,
             "--mr", mr
         ]
@@ -136,7 +139,7 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
         expected_uids = ["3", "4"]
         for uid, nl in zip(expected_uids, new_lines):
             parts = nl.split()
-            self.assertEqual(parts, [uid, "42"]);
+            self.assertEqual(parts, [uid, "42"])
 
         # mapping 中应包含 uid 3,4
         mfile = poison_dir / f"user_id2name_{attack}_mr{mr}.pkl"
@@ -145,6 +148,7 @@ class TestFakeUserGeneratorCLI(unittest.TestCase):
         for uid in expected_uids:
             self.assertIn(uid, mp)
             self.assertTrue(mp[uid].startswith("synthetic_user_"))
+
 
 if __name__ == "__main__":
     unittest.main()

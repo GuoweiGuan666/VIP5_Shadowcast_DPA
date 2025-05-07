@@ -99,6 +99,10 @@ class VIP5_Dataset(Dataset):
         if atk_snake == "direct_boosting":
             atk_snake = "direct_boost"
 
+        # PopularItemMimickingAttack  →  popular_mimicking
+        if atk_snake == "popular_item_mimicking":
+            atk_snake = "popular_mimicking"
+
 
         # 数字 MR 转字符串
         # e.g. 0.1 -> "0.1", 0.2 -> "02"
@@ -159,6 +163,14 @@ class VIP5_Dataset(Dataset):
             new_len  = len(self.sequential_data)
             print(f"[DEBUG] Val/Test 模式下，剔除了 {orig_len - new_len} 条 fake 用户数据")
 
+
+            # —— 同时过滤掉 exp_data 中 reviewerID 不在 orig_users 的条目 —— 
+            before_exp = len(self.exp_data)
+            self.exp_data = [
+                exp for exp in self.exp_data
+                if exp.get("reviewerID") in orig_users
+            ]
+            print(f"[DEBUG] Val/Test 模式下，剔除了 {before_exp - len(self.exp_data)} 条 fake reviewer 数据")
 
 
         # 4) 构建 user_items & 统计 item_count 用于采样
