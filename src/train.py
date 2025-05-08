@@ -238,7 +238,7 @@ class Trainer(TrainerBase):
                 dist.barrier()
 
             # 验证阶段：若 epoch > 4 则进行验证，否则打印跳过验证信息
-            if epoch > 4:
+            if epoch > 4:  # originally 4
                 valid_results = self.evaluate_epoch(epoch=epoch)
                 valid_results = reduce_dict(valid_results, average=False)
                 valid_loss = valid_results['total_loss']

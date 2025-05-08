@@ -153,17 +153,25 @@ class VIP5_Dataset(Dataset):
             # 1) 先一次性读原始 un-poisoned 序列，拿合法用户集合
             orig_path = os.path.join(self.data_root, self.split, "sequential_data.txt")
             orig_users = { line.split()[0] for line in ReadLineFromFile(orig_path) }
-            # 2) 用列表推导保留那些合法的 sequential_data
-            before_seq = len(ReadLineFromFile(seq_path))
+            # 2) 用列表推导保留那些用户
             self.sequential_data = [
                 line for line in self.sequential_data
                 if line.split()[0] in orig_users
             ]
 
-            print(f"[DEBUG] Val/Test 模式下，剔除了 {before_seq - len(self.sequential_data)} 条 fake 用户数据")
+            orig_len = len(ReadLineFromFile(seq_path))
+            new_len  = len(self.sequential_data)
+            print(f"[DEBUG] Val/Test 模式下，剔除了 {orig_len - new_len} 条 fake 用户数据")
 
-            # —— **不要** 再去过滤 self.exp_data ！解释任务需要保留所有 review 样本
-    
+
+            # —— 同时过滤掉 exp_data 中 reviewerID 不在 orig_users 的条目 —— 
+            before_exp = len(self.exp_data)
+            self.exp_data = [
+                exp for exp in self.exp_data
+                if exp.get("reviewerID") in orig_users
+            ]
+            print(f"[DEBUG] Val/Test 模式下，剔除了 {before_exp - len(self.exp_data)} 条 fake reviewer 数据")
+
 
         # 4) 构建 user_items & 统计 item_count 用于采样
         item_count = defaultdict(int)
@@ -187,60 +195,45 @@ class VIP5_Dataset(Dataset):
 
         # 5) 加载 user_id2idx/user_id2name 映射
         #    （路径已经在上面根据攻击模式和 mr 算好了）
-        # 在只有 Explanation 任务时，直接动态构建 reviewerID 的映射
-        if set(self.task_list.keys()) == {"explanation"}:
-            raw_user2id = {}
-            self.user_id2name = {}
-            for exp in self.exp_data:
-                uid = exp.get("reviewerID")
-                if uid not in raw_user2id:
-                    raw_user2id[uid] = len(raw_user2id)
-                    # 如果有 reviewerName，就用它，否则用 ID
-                    self.user_id2name[uid] = exp.get("reviewerName", uid)
-            print(f"[DEBUG] Explanation-only，动态构建了 {len(raw_user2id)} 个用户映射")
-        else:
-            # 否则按原逻辑，从文件里读
-            if not os.path.exists(idx_path) or not os.path.exists(name_path):
-                if atk_snake in ("none", "noattack"):
-                    # NoAttack 再 fallback 动态构建（跟上面类似）
-                    raw_user2id = {}
-                    self.user_id2name = {}
-                    for line in self.sequential_data:
-                        uid = line.split()[0]
-                        if uid not in raw_user2id:
-                            raw_user2id[uid] = len(raw_user2id)
-                            self.user_id2name[uid] = uid
-                    for exp in self.exp_data:
-                        reviewer = exp.get("reviewerID")
-                        if reviewer not in raw_user2id:
-                            raw_user2id[reviewer] = len(raw_user2id)
-                            self.user_id2name[reviewer] = reviewer
-                    print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射")
-                else:
-                    raise FileNotFoundError(
-                        f"Missing poisoned mapping files: {idx_path} or {name_path}"
-                    )
+        if not os.path.exists(idx_path) or not os.path.exists(name_path):
+            # 只有 NoAttack 时才允许动态 fallback，否则直接报错
+            if atk_snake in ("none", "noattack"):
+                raw_user2id = {}
+                self.user_id2name = {}
+                # 1) sequential_data 里的用户
+                for line in self.sequential_data:
+                    uid = line.split()[0]
+                    if uid not in raw_user2id:
+                        raw_user2id[uid] = len(raw_user2id)
+                        self.user_id2name[uid] = uid
+                # 2) explanation exp_data 里的 reviewerID
+                for exp in self.exp_data:
+                    reviewer = exp.get("reviewerID")
+                    if reviewer not in raw_user2id:
+                        raw_user2id[reviewer] = len(raw_user2id)
+                        self.user_id2name[reviewer] = reviewer
+                print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射")
             else:
-                raw_user2id       = load_pickle(idx_path)
-                self.user_id2name = load_pickle(name_path)
+                raise FileNotFoundError(
+                    f"Missing poisoned mapping files: {idx_path} or {name_path}"
+                )
+        else:
+            raw_user2id       = load_pickle(idx_path)
+            self.user_id2name = load_pickle(name_path)
 
 
 
-        # —— 只在 val/test 模式下，统一保留所有任务会用到的用户映射 —— 
-        if atk_snake not in ("none", "noattack") and self.mode in ("val", "test"):
-            keep_users = set()
-            # sequential/direct 都是从 sequential_data 拿 user_id
-            if "sequential" in self.task_list or "direct" in self.task_list:
-                keep_users |= { line.split()[0] for line in self.sequential_data }
-            # explanation 用到 exp_data 里的 reviewerID
-            if "explanation" in self.task_list:
-                keep_users |= { exp.get("reviewerID") for exp in self.exp_data }
+        # —— now that raw_user2id & self.user_id2name exist, we can safely filter them for val/test
+        if atk_snake not in ("none","noattack") and self.mode in ("val","test"):
+            valid_users = { line.split()[0] for line in self.sequential_data }
+            raw_user2id = { u: raw_user2id[u] for u in valid_users if u in raw_user2id }
+            self.user_id2name = { u: self.user_id2name[u] for u in valid_users if u in self.user_id2name }
 
-            # 过滤原始映射，只留下真正会被 __getitem__ 访问到的用户
-            raw_user2id = { u: raw_user2id[u] for u in keep_users if u in raw_user2id }
-            self.user_id2name = { u: self.user_id2name[u] for u in keep_users if u in self.user_id2name }
 
-            # 重新给过滤后的用户打连续索引
+
+            # －－－－－－－－－－－－－－－－－－－－－－－－
+            # 在这一行之后插入：重新给过滤后的用户打连续索引
+            # －－－－－－－－－－－－－－－－－－－－－－－－
             new_raw_user2id = {}
             new_user_id2name = {}
             for new_idx, u in enumerate(sorted(raw_user2id.keys())):
@@ -248,7 +241,6 @@ class VIP5_Dataset(Dataset):
                 new_user_id2name[u] = self.user_id2name[u]
             raw_user2id = new_raw_user2id
             self.user_id2name = new_user_id2name
-
 
 
         # 5.1) 构建 user2id 和 user_list once after filtering
