@@ -16,7 +16,7 @@ experiment:
 
 dataset:
   # 数据根目录（data_root），下面按 split 子目录（如 beauty/train、beauty/valid、beauty/test）寻找文件
-  base_folder: "data/toys"
+  base_folder: "data/sports"
 
   # 原始交互数据文件名（位于 base_folder/<split>/original_file）
   original_file: "sequential_data.txt"
