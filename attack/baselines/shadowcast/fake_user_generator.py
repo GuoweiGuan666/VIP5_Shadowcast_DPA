@@ -11,7 +11,6 @@ import argparse
 import os
 import pickle
 import random
-import json
 from typing import List, Dict, Any
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
@@ -96,13 +95,9 @@ def main() -> None:
         feature_vec = poisoned_feats.get(args.targeted_item_id)
         if feature_vec is None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
-        payload = {
-            "text": review,
-            "feature": feature,
-            "explanation": explanation,
-        }
         user_str = f"fake_user_{uid}"
-        seq_lines.append(f"{user_str} {tgt_idx} review {json.dumps(payload, ensure_ascii=False)}")
+        # sequential data follows the same numeric format as the original file
+        seq_lines.append(f"{user_str} {tgt_idx}")
         user2idx[user_str] = uid
         entry = {
             'reviewerID': f'fake_user_{uid}',

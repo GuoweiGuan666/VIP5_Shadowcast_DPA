@@ -11,7 +11,6 @@ ensures that the injected fake user lines follow the expected format.
 import argparse
 import os
 import sys
-import json
 
 
 def read_lines(path: str):
@@ -37,12 +36,11 @@ def verify_file(orig_path: str, pois_path: str, expected_fake: int) -> bool:
     added_lines = pois[-expected_fake:] if expected_fake > 0 else []
     target_id = None
     for i, line in enumerate(added_lines, start=1):
-        parts = line.split(maxsplit=3)
-        if len(parts) < 4:
-            print(f"  [ERROR] line {i} has insufficient fields: '{line}'")
+        parts = line.split()
+        if len(parts) != 2:
+            print(f"  [ERROR] line {i} expected 2 fields but got {len(parts)}: '{line}'")
             return False
-        uid, item_id, third = parts[0], parts[1], parts[2]
-        rest = parts[3]
+        uid, item_id = parts
         if not uid.startswith("fake_user_"):
             print(f"  [ERROR] line {i} uid not prefixed with fake_user_: '{uid}'")
             return False
@@ -50,14 +48,6 @@ def verify_file(orig_path: str, pois_path: str, expected_fake: int) -> bool:
             target_id = item_id
         if item_id != target_id:
             print(f"  [ERROR] line {i} item id inconsistent: '{item_id}' != '{target_id}'")
-            return False
-        if third != "review":
-            print(f"  [ERROR] line {i} third field not 'review': '{third}'")
-            return False
-        try:
-            json.loads(rest)
-        except Exception as e:
-            print(f"  [ERROR] line {i} JSON invalid: {e}")
             return False
 
     print("  [OK] format and count look good\n")
@@ -90,4 +80,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
