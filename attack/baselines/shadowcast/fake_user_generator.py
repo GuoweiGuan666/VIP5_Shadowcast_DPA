@@ -61,6 +61,18 @@ def main() -> None:
     with open(args.item2img_poisoned_path, "rb") as f:
         poisoned_feats = pickle.load(f)
 
+    # load original user mappings if available so new fake users are appended
+    data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
+    orig_idx_path = os.path.join(data_root, "user_id2idx.pkl")
+    orig_name_path = os.path.join(data_root, "user_id2name.pkl")
+    orig_user2idx = {}
+    orig_user2name = {}
+    if os.path.isfile(orig_idx_path) and os.path.isfile(orig_name_path):
+        with open(orig_idx_path, "rb") as f:
+            orig_user2idx = pickle.load(f)
+        with open(orig_name_path, "rb") as f:
+            orig_user2name = pickle.load(f)
+
     # load review texts of the popular item
     pop_reviews = load_reviews_from_splits(args.review_splits_path, args.popular_item_id)
     if not pop_reviews:
@@ -86,12 +98,13 @@ def main() -> None:
     explanation = template.get('explanation', '')
 
     seq_lines: List[str] = []
-    user2idx: Dict[str, int] = {}
-    user2name: Dict[str, str] = {}
+    user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
+    user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
+    base_idx = len(user2idx)
     fake_entries: List[Dict[str, Any]] = []
 
     for i in range(fake_count):
-        uid = args.num_real_users + i
+        uid = base_idx + i
         review = random.choice(pop_reviews)
         feature_vec = poisoned_feats.get(args.targeted_item_id)
         if feature_vec is None:
