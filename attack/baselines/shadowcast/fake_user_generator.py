@@ -11,6 +11,7 @@ import argparse
 import os
 import pickle
 import random
+from glob import glob
 from typing import List, Dict, Any
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
@@ -61,17 +62,27 @@ def main() -> None:
     with open(args.item2img_poisoned_path, "rb") as f:
         poisoned_feats = pickle.load(f)
 
-    # load original user mappings if available so new fake users are appended
+    # load all original user mappings found under the dataset directory
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
-    orig_idx_path = os.path.join(data_root, "user_id2idx.pkl")
-    orig_name_path = os.path.join(data_root, "user_id2name.pkl")
-    orig_user2idx = {}
-    orig_user2name = {}
-    if os.path.isfile(orig_idx_path) and os.path.isfile(orig_name_path):
-        with open(orig_idx_path, "rb") as f:
-            orig_user2idx = pickle.load(f)
-        with open(orig_name_path, "rb") as f:
-            orig_user2name = pickle.load(f)
+    orig_user2idx: Dict[str, int] = {}
+    orig_user2name: Dict[str, str] = {}
+    possible_idx = [
+        os.path.join(data_root, "user_id2idx.pkl"),
+        *glob(os.path.join(data_root, "*", "user_id2idx.pkl")),
+    ]
+    for idx_path in possible_idx:
+        name_path = idx_path.replace("user_id2idx.pkl", "user_id2name.pkl")
+        if os.path.isfile(idx_path) and os.path.isfile(name_path):
+            with open(idx_path, "rb") as f:
+                mapping_idx = pickle.load(f)
+            with open(name_path, "rb") as f:
+                mapping_name = pickle.load(f)
+            for k, v in mapping_idx.items():
+                if k not in orig_user2idx:
+                    orig_user2idx[str(k)] = v
+            for k, v in mapping_name.items():
+                if k not in orig_user2name:
+                    orig_user2name[str(k)] = v
 
     # load review texts of the popular item
     pop_reviews = load_reviews_from_splits(args.review_splits_path, args.popular_item_id)
