@@ -87,6 +87,7 @@ def main() -> None:
 
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {}
+    user2name: Dict[str, str] = {}
     fake_entries: List[Dict[str, Any]] = []
 
     for i in range(fake_count):
@@ -99,6 +100,7 @@ def main() -> None:
         # sequential data follows the same numeric format as the original file
         seq_lines.append(f"{user_str} {tgt_idx}")
         user2idx[user_str] = uid
+        user2name[user_str] = user_str
         entry = {
             'reviewerID': f'fake_user_{uid}',
             'reviewerName': f'fake_user_{uid}',
@@ -131,6 +133,11 @@ def main() -> None:
     with open(idx_out, 'wb') as f:
         pickle.dump(user2idx, f)
     print(f'[INFO] user2idx written -> {idx_out}')
+
+    name_out = os.path.join(args.poisoned_data_root, f'user_id2name_shadowcast_mr{args.mr}.pkl')
+    with open(name_out, 'wb') as f:
+        pickle.dump(user2name, f)
+    print(f'[INFO] user2name written -> {name_out}')
 
     reviews_out = os.path.join(args.poisoned_data_root, f'fake_reviews_shadowcast_mr{args.mr}.pkl')
     with open(reviews_out, 'wb') as f:
