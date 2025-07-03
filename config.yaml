@@ -9,7 +9,7 @@ experiment:
   #   DirectBoostingAttack        —— 直推攻击（读取 poisoned_file）
   #   RandomInjectionAttack       —— 随机注入攻击（读取 poisoned_file）
   #   PopularItemMimickingAttack  —— 热门模仿攻击（读取 poisoned_file）
-  suffix: "PopularItemMimickingAttack"
+  suffix: "ShadowCastAttack"
 
 # 恶意用户比例（0~1）
   mr: 0.1

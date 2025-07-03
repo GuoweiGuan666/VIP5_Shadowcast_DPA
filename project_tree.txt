@@ -1,7 +1,10 @@
 /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA
 ├── .git
 │   ├── COMMIT_EDITMSG
+│   ├── FETCH_HEAD
 │   ├── HEAD
+│   ├── MERGE_MSG.save
+│   ├── ORIG_HEAD
 │   ├── branches
 │   ├── config
 │   ├── description
@@ -18,44 +21,7 @@
 │   │   ├── pre-receive.sample
 │   │   └── ... (and 3 more)
 │   ├── index
-│   ├── info
-│   │   └── exclude
-│   ├── logs
-│   │   ├── HEAD
-│   │   └── refs
-│   │       ├── heads
-│   │       │   ├── attack_baselines
-│   │       │   │   └── direct_boosting_attack
-│   │       │   └── main
-│   │       └── remotes
-│   │           └── origin
-│   │               └── main
-│   ├── objects
-│   │   ├── 01
-│   │   │   └── 7e171d8f50a0dcfa036d61a56ae5ba43ec84eb
-│   │   ├── 04
-│   │   │   ├── 28111c5263c9ee349e8e83bca9a6cae12e6370
-│   │   │   └── 7b69b47e0a06c1e0ecaa0556355b6c3873450a
-│   │   ├── 06
-│   │   │   ├── 02e4fdd8b40973d44e9fc06cb94efc39d97105
-│   │   │   └── f98e2d7abb679c334147c1dd29902e89ea43fb
-│   │   ├── 0e
-│   │   │   ├── 47f8d6609ab8aa87581aa06688e4500309ec09
-│   │   │   └── dc9656f7f6f711698a548f050691d238d4b61d
-│   │   ├── 14
-│   │   │   └── 199e8de730f06276ddddb141315c87e9cbad20
-│   │   ├── 17
-│   │   │   └── c360987322cc9ad359fe000aada2b9b05ece37
-│   │   ├── 1d
-│   │   │   └── 951fa1d099cf6655908aead8a045120540929a
-│   │   ├── 1e
-│   │   │   └── eba59aaae6cf38c503b9b45667ed7311bb6dd7
-│   │   ├── 26
-│   │   │   └── 97c439b9362ca998426032b71af1a69aa6b000
-│   │   ├── 27
-│   │   │   └── 5b6207b341142c9307c337484304e559d8db06
-│   │   └── ... (and 79 more)
-│   └── ... (and 2 more)
+│   └── ... (and 5 more)
 ├── .gitignore
 ├── .pytest_cache
 │   ├── .gitignore
@@ -74,67 +40,157 @@
 │   ├── analyze_popularity.py
 │   └── results
 │       ├── beauty
+│       │   ├── high_pop_items_beauty_highcount_100.txt
 │       │   ├── low_pop_items_beauty_lowcount_1.txt
+│       │   ├── low_pop_items_beauty_lowpercentile_10.0.txt
+│       │   ├── popularity_beauty.png
 │       │   ├── popularity_beauty_lowcount_1.png
 │       │   └── popularity_log_beauty.txt
 │       ├── clothing
+│       │   ├── high_pop_items_clothing_highcount_100.txt
 │       │   ├── low_pop_items_clothing_lowcount_1.txt
+│       │   ├── low_pop_items_clothing_lowpercentile_10.0.txt
+│       │   ├── popularity_clothing.png
 │       │   ├── popularity_clothing_lowcount_1.png
 │       │   └── popularity_log_clothing.txt
 │       ├── sports
+│       │   ├── high_pop_items_sports_highcount_100.txt
 │       │   ├── low_pop_items_sports_lowcount_1.txt
+│       │   ├── low_pop_items_sports_lowpercentile_10.0.txt
 │       │   ├── popularity_log_sports.txt
+│       │   ├── popularity_sports.png
 │       │   └── popularity_sports_lowcount_1.png
 │       └── toys
+│           ├── high_pop_items_toys_highcount_100.txt
 │           ├── low_pop_items_toys_lowcount_1.txt
+│           ├── low_pop_items_toys_lowpercentile_10.0.txt
 │           ├── popularity_log_toys.txt
+│           ├── popularity_toys.png
 │           └── popularity_toys_lowcount_1.png
+├── attack
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   └── __init__.cpython-39.pyc
+│   └── baselines
+│       ├── DirectBoost_Random_Popular_attack
+│       │   ├── __init__.py
+│       │   ├── __pycache__
+│       │   │   ├── __init__.cpython-39.pyc
+│       │   │   ├── fake_user_generator.cpython-39.pyc
+│       │   │   ├── generate_user_mappings.cpython-39.pyc
+│       │   │   └── poison_exp_splits.cpython-39.pyc
+│       │   ├── batch_poison.py
+│       │   ├── batch_poison_0505_backup.py
+│       │   ├── batch_poison_0506_backup.py
+│       │   ├── fake_user_generator.py
+│       │   ├── fake_user_generator_0504_backup.py
+│       │   ├── fake_user_generator_0505_backup.py
+│       │   ├── generate_user_mappings.py
+│       │   ├── poison_exp_splits.py
+│       │   └── ... (and 4 more)
+│       ├── __init__.py
+│       ├── __pycache__
+│       │   └── __init__.cpython-39.pyc
+│       └── shadowcast
+│           ├── fake_user_generator.py
+│           ├── image_perturbation.py
+│           ├── run_shadowcast_attack_pipeline.sh
+│           └── shadowcast_embedding.py
+├── config.yaml
+├── config_eval.yaml
 ├── data
 │   ├── beauty
+│   │   ├── .ipynb_checkpoints
 │   │   ├── datamaps.json
 │   │   ├── exp_splits.pkl
 │   │   ├── item2img_dict.pkl
 │   │   ├── meta.json.gz
 │   │   ├── negative_samples.txt
+│   │   ├── poisoned
+│   │   │   ├── exp_splits_direct_boost_mr0.1.pkl
+│   │   │   ├── exp_splits_direct_boost_mr0.5.pkl
+│   │   │   ├── exp_splits_popular_mimicking_mr0.1.pkl
+│   │   │   ├── exp_splits_random_injection_mr0.1.pkl
+│   │   │   ├── sequential_data_direct_boost_mr0.1.txt
+│   │   │   ├── sequential_data_direct_boost_mr0.5.txt
+│   │   │   ├── sequential_data_popular_mimicking_mr0.1.txt
+│   │   │   ├── sequential_data_random_injection_mr0.1.txt
+│   │   │   ├── user_id2idx_direct_boost_mr0.1.pkl
+│   │   │   ├── user_id2idx_direct_boost_mr0.5.pkl
+│   │   │   └── ... (and 6 more)
 │   │   ├── rating_splits_augmented.pkl
 │   │   ├── review_splits.pkl
 │   │   ├── sequential_data.txt
-│   │   ├── user_id2name.pkl
-│   │   └── user_item_pairs_dict.pkl
+│   │   └── ... (and 2 more)
 │   ├── clothing
 │   │   ├── datamaps.json
 │   │   ├── exp_splits.pkl
 │   │   ├── item2img_dict.pkl
 │   │   ├── meta.json.gz
 │   │   ├── negative_samples.txt
+│   │   ├── poisoned
+│   │   │   ├── exp_splits_direct_boost_mr0.1.pkl
+│   │   │   ├── exp_splits_direct_boost_mr0.5.pkl
+│   │   │   ├── exp_splits_popular_mimicking_mr0.1.pkl
+│   │   │   ├── exp_splits_random_injection_mr0.1.pkl
+│   │   │   ├── sequential_data_direct_boost_mr0.1.txt
+│   │   │   ├── sequential_data_direct_boost_mr0.5.txt
+│   │   │   ├── sequential_data_popular_mimicking_mr0.1.txt
+│   │   │   ├── sequential_data_random_injection_mr0.1.txt
+│   │   │   ├── user_id2idx_direct_boost_mr0.1.pkl
+│   │   │   ├── user_id2idx_direct_boost_mr0.5.pkl
+│   │   │   └── ... (and 6 more)
 │   │   ├── rating_splits_augmented.pkl
 │   │   ├── review_splits.pkl
 │   │   ├── sequential_data.txt
 │   │   ├── user_id2name.pkl
-│   │   └── user_item_pairs_dict.pkl
+│   │   └── ... (and 1 more)
 │   ├── sports
+│   │   ├── .ipynb_checkpoints
 │   │   ├── datamaps.json
 │   │   ├── exp_splits.pkl
 │   │   ├── item2img_dict.pkl
 │   │   ├── meta.json.gz
 │   │   ├── negative_samples.txt
+│   │   ├── poisoned
+│   │   │   ├── exp_splits_direct_boost_mr0.1.pkl
+│   │   │   ├── exp_splits_direct_boost_mr0.5.pkl
+│   │   │   ├── exp_splits_popular_mimicking_mr0.1.pkl
+│   │   │   ├── exp_splits_random_injection_mr0.1.pkl
+│   │   │   ├── sequential_data_direct_boost_mr0.1.txt
+│   │   │   ├── sequential_data_direct_boost_mr0.5.txt
+│   │   │   ├── sequential_data_popular_mimicking_mr0.1.txt
+│   │   │   ├── sequential_data_random_injection_mr0.1.txt
+│   │   │   ├── user_id2idx_direct_boost_mr0.1.pkl
+│   │   │   ├── user_id2idx_direct_boost_mr0.5.pkl
+│   │   │   └── ... (and 6 more)
 │   │   ├── rating_splits_augmented.pkl
 │   │   ├── review_splits.pkl
 │   │   ├── sequential_data.txt
-│   │   ├── user_id2name.pkl
-│   │   └── user_item_pairs_dict.pkl
-│   ├── toys
-│   │   ├── datamaps.json
-│   │   ├── exp_splits.pkl
-│   │   ├── item2img_dict.pkl
-│   │   ├── meta.json.gz
-│   │   ├── negative_samples.txt
-│   │   ├── rating_splits_augmented.pkl
-│   │   ├── review_splits.pkl
-│   │   ├── sequential_data.txt
-│   │   ├── user_id2name.pkl
-│   │   └── user_item_pairs_dict.pkl
-│   └── vip5_data.zip
+│   │   └── ... (and 2 more)
+│   └── toys
+│       ├── datamaps.json
+│       ├── exp_splits.pkl
+│       ├── exp_splits_C3_nested.pkl
+│       ├── item2img_dict.pkl
+│       ├── meta.json.gz
+│       ├── negative_samples.txt
+│       ├── poisoned
+│       │   ├── exp_splits_direct_boost_mr0.1.pkl
+│       │   ├── exp_splits_direct_boost_mr0.5.pkl
+│       │   ├── exp_splits_popular_mimicking_mr0.1.pkl
+│       │   ├── exp_splits_random_injection_mr0.1.pkl
+│       │   ├── sequential_data_direct_boost_mr0.1.txt
+│       │   ├── sequential_data_direct_boost_mr0.5.txt
+│       │   ├── sequential_data_popular_mimicking_mr0.1.txt
+│       │   ├── sequential_data_random_injection_mr0.1.txt
+│       │   ├── user_id2idx_direct_boost_mr0.1.pkl
+│       │   ├── user_id2idx_direct_boost_mr0.5.pkl
+│       │   └── ... (and 6 more)
+│       ├── rating_splits_augmented.pkl
+│       ├── review_splits.pkl
+│       ├── sequential_data.txt
+│       └── ... (and 2 more)
 ├── env_setup.txt
 ├── features
 │   ├── rn101_features
@@ -389,6 +445,8 @@
 │   └── vitl14_features.zip
 ├── figure
 │   └── vip5_teaser.png
+├── helper
+│   └── inspect_user_mapping.py
 ├── log
 │   ├── beauty
 │   │   ├── 0305
@@ -401,33 +459,77 @@
 │   │   │   └── fine_tuning_logs
 │   │   │       ├── beauty-vitb32-2-8-20.log
 │   │   │       └── beauty-vitb32-2-8-20_nohup.out
-│   │   └── 0410
-│   │       ├── evaluation_logs
-│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-5.txt
-│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-8.txt
-│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-12.txt
-│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-3.txt
-│   │       │   ├── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-3.txt
-│   │       │   └── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   ├── 0410
+│   │   │   ├── evaluation_logs
+│   │   │   │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-5.txt
+│   │   │   │   ├── VIP5_beauty_vitb32_8_20_evaluation_direct_B-8.txt
+│   │   │   │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │   │   │   ├── VIP5_beauty_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │   │   │   ├── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-3.txt
+│   │   │   │   └── VIP5_beauty_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── beauty-vitb32-2-8-20-NoAttack.log
+│   │   │       └── beauty-vitb32-2-8-20-NoAttack_nohup.out
+│   │   ├── 0502
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0.0_beauty-vitb32-2-8-20.out
+│   │   │       └── NoAttack_0_beauty-vitb32-2-8-20.log
+│   │   ├── 0509
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_beauty-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_beauty-vitb32-2-8-20.out
+│   │   ├── 0510
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_beauty-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_beauty-vitb32-2-8-20.out
+│   │   └── 0514
 │   │       └── fine_tuning_logs
-│   │           ├── beauty-vitb32-2-8-20-NoAttack.log
-│   │           └── beauty-vitb32-2-8-20-NoAttack_nohup.out
+│   │           ├── DirectBoostingAttack_0.1_beauty-vitb32-2-8-20.log
+│   │           ├── DirectBoostingAttack_0.1_beauty-vitb32-2-8-20.out
+│   │           ├── PopularItemMimickingAttack_0.1_beauty-vitb32-2-8-20.log
+│   │           ├── PopularItemMimickingAttack_0.1_beauty-vitb32-2-8-20.out
+│   │           ├── RandomInjectionAttack_0.1_beauty-vitb32-2-8-20.log
+│   │           └── RandomInjectionAttack_0.1_beauty-vitb32-2-8-20.out
 │   ├── clothing
 │   │   ├── 0410
 │   │   │   └── fine_tuning_logs
 │   │   │       ├── clothing-vitb32-2-8-20-NoAttack.log
 │   │   │       └── clothing-vitb32-2-8-20-NoAttack_nohup.out
-│   │   └── 0411
-│   │       ├── evaluation_logs
-│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-5.txt
-│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-8.txt
-│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-12.txt
-│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-3.txt
-│   │       │   ├── VIP5_clothing_vitb32_8_20_evaluation_sequential_A-3.txt
-│   │       │   └── VIP5_clothing_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   ├── 0411
+│   │   │   ├── evaluation_logs
+│   │   │   │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-5.txt
+│   │   │   │   ├── VIP5_clothing_vitb32_8_20_evaluation_direct_B-8.txt
+│   │   │   │   ├── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │   │   │   ├── VIP5_clothing_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │   │   │   ├── VIP5_clothing_vitb32_8_20_evaluation_sequential_A-3.txt
+│   │   │   │   └── VIP5_clothing_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── clothing-vitb32-2-8-20-NoAttack.log
+│   │   │       └── clothing-vitb32-2-8-20-NoAttack_nohup.out
+│   │   ├── 0418
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── clothing-vitb32-2-8-20-DirectBoostingAttack.log
+│   │   │       └── clothing-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│   │   ├── 0420
+│   │   │   └── fine_tuning_logs
+│   │   │       └── DirectBoostingAttack_0.1_toys-vitb32-2-8-20_nohup.out
+│   │   ├── 0502
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0.0_clothing-vitb32-2-8-20.out
+│   │   │       └── NoAttack_0_clothing-vitb32-2-8-20.log
+│   │   ├── 0509
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_clothing-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_clothing-vitb32-2-8-20.out
+│   │   └── 0513
 │   │       └── fine_tuning_logs
-│   │           ├── clothing-vitb32-2-8-20-NoAttack.log
-│   │           └── clothing-vitb32-2-8-20-NoAttack_nohup.out
+│   │           ├── DirectBoostingAttack_0.1_clothing-vitb32-2-8-20.log
+│   │           ├── DirectBoostingAttack_0.1_clothing-vitb32-2-8-20.out
+│   │           ├── PopularItemMimickingAttack_0.1_clothing-vitb32-2-8-20.log
+│   │           ├── PopularItemMimickingAttack_0.1_clothing-vitb32-2-8-20.out
+│   │           ├── RandomInjectionAttack_0.1_clothing-vitb32-2-8-20.log
+│   │           ├── RandomInjectionAttack_0.1_clothing-vitb32-2-8-20.out
+│   │           └── __clothing-vitb32-2-8-20.log
 │   ├── sports
 │   │   ├── 0304
 │   │   │   └── fine_tuning_logs
@@ -437,17 +539,52 @@
 │   │   │   └── fine_tuning_logs
 │   │   │       ├── sports-vitb32-2-8-20.log
 │   │   │       └── sports-vitb32-2-8-20_nohup.out
-│   │   └── 0412
-│   │       ├── evaluation_logs
-│   │       │   ├── VIP5_sports_vitb32_8_20_evaluation_direct_B-5.txt
-│   │       │   ├── VIP5_sports_vitb32_8_20_evaluation_direct_B-8.txt
-│   │       │   ├── VIP5_sports_vitb32_8_20_evaluation_explanation_C-12.txt
-│   │       │   ├── VIP5_sports_vitb32_8_20_evaluation_explanation_C-3.txt
-│   │       │   ├── VIP5_sports_vitb32_8_20_evaluation_sequential_A-3.txt
-│   │       │   └── VIP5_sports_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   ├── 0412
+│   │   │   ├── evaluation_logs
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_direct_B-5.txt
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_direct_B-8.txt
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_sequential_A-3.txt
+│   │   │   │   └── VIP5_sports_vitb32_8_20_evaluation_sequential_A-9.txt
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── sports-vitb32-2-8-20-NoAttack.log
+│   │   │       └── sports-vitb32-2-8-20-NoAttack_nohup.out
+│   │   ├── 0417
+│   │   │   ├── evaluation_logs
+│   │   │   │   ├── VIP5_sports_vitb32_8_20_evaluation_explanation_C-12.txt
+│   │   │   │   └── VIP5_sports_vitb32_8_20_evaluation_explanation_C-3.txt
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── sports-vitb32-2-8-20-DirectBoostingAttack.log
+│   │   │       └── sports-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│   │   ├── 0420
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.log
+│   │   │       └── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.out
+│   │   ├── 0430
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.log
+│   │   │       └── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.out
+│   │   ├── 0501
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_sports-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_sports-vitb32-2-8-20.out
+│   │   ├── 0508
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_sports-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_sports-vitb32-2-8-20.out
+│   │   ├── 0509
+│   │   │   └── fine_tuning_logs
+│   │   │       ├── NoAttack_0_sports-vitb32-2-8-20.log
+│   │   │       └── NoAttack_0_sports-vitb32-2-8-20.out
+│   │   └── 0512
 │   │       └── fine_tuning_logs
-│   │           ├── sports-vitb32-2-8-20-NoAttack.log
-│   │           └── sports-vitb32-2-8-20-NoAttack_nohup.out
+│   │           ├── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.log
+│   │           ├── DirectBoostingAttack_0.1_sports-vitb32-2-8-20.out
+│   │           ├── PopularItemMimickingAttack_0.1_sports-vitb32-2-8-20.log
+│   │           ├── PopularItemMimickingAttack_0.1_sports-vitb32-2-8-20.out
+│   │           ├── RandomInjectionAttack_0.1_sports-vitb32-2-8-20.log
+│   │           └── RandomInjectionAttack_0.1_sports-vitb32-2-8-20.out
 │   └── toys
 │       ├── 0304
 │       │   ├── evaluation_logs
@@ -466,21 +603,72 @@
 │       │       ├── VIP5_toys_vitb32_8_20_evaluation_direct.txt
 │       │       ├── VIP5_toys_vitb32_8_20_evaluation_explanation.txt
 │       │       └── VIP5_toys_vitb32_8_20_evaluation_sequential.txt
-│       └── 0413
-│           ├── evaluation_logs
-│           │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-5.txt
-│           │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-8.txt
-│           │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
-│           │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
-│           │   ├── VIP5_toys_vitb32_8_20_evaluation_sequential_A-3.txt
-│           │   └── VIP5_toys_vitb32_8_20_evaluation_sequential_A-9.txt
-│           └── fine_tuning_logs
-│               ├── toys-vitb32-2-8-20-NoAttack.log
-│               └── toys-vitb32-2-8-20-NoAttack_nohup.out
+│       ├── 0413
+│       │   ├── evaluation_logs
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-5.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-8.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_sequential_A-3.txt
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_sequential_A-9.txt
+│       │   └── fine_tuning_logs
+│       │       ├── toys-vitb32-2-8-20-NoAttack.log
+│       │       └── toys-vitb32-2-8-20-NoAttack_nohup.out
+│       ├── 0417
+│       │   ├── evaluation_logs
+│       │   │   ├── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_direct_B-8.txt
+│       │   │   ├── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_explanation_C-12.txt
+│       │   │   ├── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_sequential_A-3.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
+│       │   └── fine_tuning_logs
+│       │       ├── toys-vitb32-2-8-20-DirectBoostingAttack.log
+│       │       └── toys-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│       ├── 0419
+│       │   ├── evaluation_logs
+│       │   │   └── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_explanation_C-12.txt
+│       │   └── fine_tuning_logs
+│       │       ├── DirectBoostingAttack_0.1_toys-vitb32-2-8-20.log
+│       │       └── DirectBoostingAttack_0.1_toys-vitb32-2-8-20.out
+│       ├── 0421
+│       │   ├── evaluation_logs
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
+│       │   └── fine_tuning_logs
+│       │       ├── toys-vitb32-2-8-20-DirectBoostingAttack.log
+│       │       └── toys-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│       ├── 0422
+│       │   ├── evaluation_logs
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-5.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
+│       │   └── fine_tuning_logs
+│       │       ├── toys-vitb32-2-8-20-DirectBoostingAttack.log
+│       │       └── toys-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│       ├── 0423
+│       │   ├── evaluation_logs
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_direct_B-5.txt
+│       │   │   ├── VIP5_toys_vitb32_8_20_evaluation_explanation_C-12.txt
+│       │   │   └── VIP5_toys_vitb32_8_20_evaluation_explanation_C-3.txt
+│       │   └── fine_tuning_logs
+│       │       ├── toys-vitb32-2-8-20-DirectBoostingAttack.log
+│       │       └── toys-vitb32-2-8-20-DirectBoostingAttack_nohup.out
+│       ├── 0425
+│       │   ├── evaluation_logs
+│       │   │   ├── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_explanation_C-12.txt
+│       │   │   ├── DirectBoostingAttack_0.1_VIP5_toys_vitb32_8_20_eval_explanation_C-3.txt
+│       │   │   ├── NoAttack_0.0_VIP5_toys_vitb32_8_20_eval_explanation_C-12.txt
+│       │   │   └── NoAttack_0.0_VIP5_toys_vitb32_8_20_eval_explanation_C-3.txt
+│       │   └── fine_tuning_logs
+│       │       ├── DirectBoostingAttack_0.1_toys-vitb32-2-8-20.log
+│       │       ├── DirectBoostingAttack_0.1_toys-vitb32-2-8-20.out
+│       │       ├── NoAttack_0_toys-vitb32-2-8-20.log
+│       │       └── NoAttack_0_toys-vitb32-2-8-20.out
+│       └── ... (and 10 more)
 ├── notebooks
 │   ├── .ipynb_checkpoints
 │   │   ├── all_templates-checkpoint.py
 │   │   └── evaluate_VIP5-checkpoint.ipynb
+│   ├── __init__.py
 │   ├── __pycache__
 │   │   ├── all_templates.cpython-39.pyc
 │   │   ├── modeling_vip5.cpython-39.pyc
@@ -518,21 +706,24 @@
 │   │   └── ... (and 1 more)
 │   ├── all_templates.py
 │   ├── evaluate
+│   │   ├── __init__.py
 │   │   ├── __pycache__
+│   │   │   ├── __init__.cpython-39.pyc
 │   │   │   ├── bleu.cpython-39.pyc
 │   │   │   ├── metrics4rec.cpython-39.pyc
 │   │   │   ├── rouge.cpython-39.pyc
 │   │   │   └── utils.cpython-39.pyc
 │   │   ├── bleu.py
 │   │   ├── metrics4rec.py
+│   │   ├── metrics4rec_0418_backup.py
+│   │   ├── metrics4rec_0430_backup.py
 │   │   ├── rouge.py
 │   │   └── utils.py
 │   ├── evaluate_VIP5.ipynb
 │   ├── evaluate_VIP5_0107.ipynb
 │   ├── evaluate_VIP5_final.ipynb
-│   ├── evaluate_VIP5_origin.ipynb
-│   ├── modeling_vip5.py
-│   └── ... (and 6 more)
+│   ├── evaluate_VIP5_final_0419_backup.ipynb
+│   └── ... (and 9 more)
 ├── photos
 │   ├── beauty
 │   │   ├── 01mSuFCZ29L.jpg
@@ -588,11 +779,16 @@
 ├── project_code_extractor.py
 ├── project_tree.txt
 ├── project_tree_generator.py
+├── read_pkl.py
 ├── requirements.txt
+├── sanity_check.py
 ├── scripts
+│   ├── run_finetune.sh
 │   ├── train_VIP5.sh
 │   ├── train_VIP5_0303_backup.sh
 │   ├── train_VIP5_0410_backup.sh
+│   ├── train_VIP5_0415_backup.sh
+│   ├── train_VIP5_0419_backup.sh
 │   └── train_VIP5_origin.sh
 ├── snap
 │   ├── beauty
@@ -616,8 +812,73 @@
 │   │   │       ├── Epoch07.pth
 │   │   │       ├── Epoch08.pth
 │   │   │       └── ... (and 11 more)
-│   │   └── 0410
-│   │       └── beauty-vitb32-2-8-20-NoAttack
+│   │   ├── 0410
+│   │   │   └── beauty-vitb32-2-8-20-NoAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0502
+│   │   │   └── NoAttack_0.0_beauty-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0509
+│   │   │   └── NoAttack_0.0_beauty-vitb32-2-8-20
+│   │   ├── 0510
+│   │   │   └── NoAttack_0.0_beauty-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   └── 0514
+│   │       ├── DirectBoostingAttack_0.1_beauty-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       ├── PopularItemMimickingAttack_0.1_beauty-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       └── RandomInjectionAttack_0.1_beauty-vitb32-2-8-20
 │   │           ├── BEST_EVAL_LOSS.pth
 │   │           ├── Epoch00.pth
 │   │           ├── Epoch01.pth
@@ -643,8 +904,84 @@
 │   │   │       ├── Epoch07.pth
 │   │   │       ├── Epoch08.pth
 │   │   │       └── ... (and 7 more)
-│   │   └── 0411
-│   │       └── clothing-vitb32-2-8-20-NoAttack
+│   │   ├── 0411
+│   │   │   └── clothing-vitb32-2-8-20-NoAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0418
+│   │   │   └── clothing-vitb32-2-8-20-DirectBoostingAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 2 more)
+│   │   ├── 0502
+│   │   │   └── NoAttack_0.0_clothing-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0509
+│   │   │   └── NoAttack_0.0_clothing-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   └── 0513
+│   │       ├── DirectBoostingAttack_0.1_clothing-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       ├── PopularItemMimickingAttack_0.1_clothing-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       └── RandomInjectionAttack_0.1_clothing-vitb32-2-8-20
 │   │           ├── BEST_EVAL_LOSS.pth
 │   │           ├── Epoch00.pth
 │   │           ├── Epoch01.pth
@@ -671,8 +1008,101 @@
 │   │   │       ├── Epoch02.pth
 │   │   │       ├── Epoch03.pth
 │   │   │       └── Epoch04.pth
-│   │   └── 0412
-│   │       └── sports-vitb32-2-8-20-NoAttack
+│   │   ├── 0412
+│   │   │   └── sports-vitb32-2-8-20-NoAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0417
+│   │   │   └── sports-vitb32-2-8-20-DirectBoostingAttack
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0420
+│   │   │   └── DirectBoostingAttack_0.1_sports-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0430
+│   │   │   └── DirectBoostingAttack_0.1_sports-vitb32-2-8-20
+│   │   ├── 0501
+│   │   │   └── NoAttack_0.0_sports-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   ├── 0508
+│   │   │   └── NoAttack_0.0_sports-vitb32-2-8-20
+│   │   ├── 0509
+│   │   │   └── NoAttack_0.0_sports-vitb32-2-8-20
+│   │   │       ├── BEST_EVAL_LOSS.pth
+│   │   │       ├── Epoch00.pth
+│   │   │       ├── Epoch01.pth
+│   │   │       ├── Epoch02.pth
+│   │   │       ├── Epoch03.pth
+│   │   │       ├── Epoch04.pth
+│   │   │       ├── Epoch05.pth
+│   │   │       ├── Epoch06.pth
+│   │   │       ├── Epoch07.pth
+│   │   │       ├── Epoch08.pth
+│   │   │       └── ... (and 11 more)
+│   │   └── 0512
+│   │       ├── DirectBoostingAttack_0.1_sports-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       ├── PopularItemMimickingAttack_0.1_sports-vitb32-2-8-20
+│   │       │   ├── BEST_EVAL_LOSS.pth
+│   │       │   ├── Epoch00.pth
+│   │       │   ├── Epoch01.pth
+│   │       │   ├── Epoch02.pth
+│   │       │   ├── Epoch03.pth
+│   │       │   ├── Epoch04.pth
+│   │       │   ├── Epoch05.pth
+│   │       │   ├── Epoch06.pth
+│   │       │   ├── Epoch07.pth
+│   │       │   ├── Epoch08.pth
+│   │       │   └── ... (and 11 more)
+│   │       └── RandomInjectionAttack_0.1_sports-vitb32-2-8-20
 │   │           ├── BEST_EVAL_LOSS.pth
 │   │           ├── Epoch00.pth
 │   │           ├── Epoch01.pth
@@ -685,30 +1115,140 @@
 │   │           ├── Epoch08.pth
 │   │           └── ... (and 11 more)
 │   └── toys
-│       └── 0413
-│           └── toys-vitb32-2-8-20-NoAttack
-│               ├── BEST_EVAL_LOSS.pth
-│               ├── Epoch00.pth
-│               ├── Epoch01.pth
-│               ├── Epoch02.pth
-│               ├── Epoch03.pth
-│               ├── Epoch04.pth
-│               ├── Epoch05.pth
-│               ├── Epoch06.pth
-│               ├── Epoch07.pth
-│               ├── Epoch08.pth
-│               └── ... (and 11 more)
+│       ├── 0413
+│       │   └── toys-vitb32-2-8-20-NoAttack
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0417
+│       │   └── toys-vitb32-2-8-20-DirectBoostingAttack
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0419
+│       │   └── DirectBoostingAttack_0.1_toys-vitb32-2-8-20
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0421
+│       │   └── toys-vitb32-2-8-20-DirectBoostingAttack
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0422
+│       │   └── toys-vitb32-2-8-20-DirectBoostingAttack
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0423
+│       │   └── toys-vitb32-2-8-20-DirectBoostingAttack
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0425
+│       │   ├── DirectBoostingAttack_0.1_toys-vitb32-2-8-20
+│       │   │   ├── BEST_EVAL_LOSS.pth
+│       │   │   ├── Epoch00.pth
+│       │   │   ├── Epoch01.pth
+│       │   │   ├── Epoch02.pth
+│       │   │   ├── Epoch03.pth
+│       │   │   ├── Epoch04.pth
+│       │   │   ├── Epoch05.pth
+│       │   │   ├── Epoch06.pth
+│       │   │   ├── Epoch07.pth
+│       │   │   ├── Epoch08.pth
+│       │   │   └── ... (and 11 more)
+│       │   └── NoAttack_0.0_toys-vitb32-2-8-20
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 11 more)
+│       ├── 0427
+│       │   └── NoAttack_0.0_toys-vitb32-2-8-20
+│       │       ├── BEST_EVAL_LOSS.pth
+│       │       ├── Epoch00.pth
+│       │       ├── Epoch01.pth
+│       │       ├── Epoch02.pth
+│       │       ├── Epoch03.pth
+│       │       ├── Epoch04.pth
+│       │       ├── Epoch05.pth
+│       │       ├── Epoch06.pth
+│       │       ├── Epoch07.pth
+│       │       ├── Epoch08.pth
+│       │       └── ... (and 9 more)
+│       ├── 0428
+│       │   └── DirectBoostingAttack_0.1_toys-vitb32-2-8-20
+│       ├── 0429
+│       │   └── DirectBoostingAttack_0.1_toys-vitb32-2-8-20
+│       └── ... (and 7 more)
 ├── src
 │   ├── __pycache__
 │   │   ├── all_templates.cpython-39.pyc
+│   │   ├── data.cpython-310.pyc
 │   │   ├── data.cpython-39.pyc
 │   │   ├── dist_utils.cpython-39.pyc
+│   │   ├── fake_user_generator.cpython-39.pyc
 │   │   ├── model.cpython-39.pyc
 │   │   ├── modeling_vip5.cpython-39.pyc
 │   │   ├── param.cpython-39.pyc
 │   │   ├── tokenization.cpython-39.pyc
 │   │   ├── trainer_base.cpython-39.pyc
-│   │   └── utils.cpython-39.pyc
+│   │   └── ... (and 1 more)
 │   ├── adapters
 │   │   ├── __init__.py
 │   │   ├── __pycache__
@@ -741,47 +1281,59 @@
 │   ├── all_templates.py
 │   ├── data.py
 │   ├── data_0104_backup.py
-│   ├── data_0410_backup.py
-│   ├── dist_utils.py
-│   ├── fake_user_generator.py
-│   ├── model.py
-│   ├── modeling_vip5.py
-│   └── ... (and 10 more)
+│   ├── data_0430_backup.py
+│   ├── data_0503_backup.py
+│   ├── data_0503_backup_1.py
+│   ├── data_0504_backup.py
+│   ├── data_0505_backup.py
+│   └── ... (and 15 more)
 ├── test
-│   └── test_fake_user_generator.py
-└── transformers
-    ├── .circleci
-    │   ├── TROUBLESHOOT.md
-    │   └── config.yml
-    ├── .coveragerc
-    ├── .gitattributes
-    ├── .github
-    │   ├── ISSUE_TEMPLATE
-    │   │   ├── bug-report.yml
-    │   │   ├── config.yml
-    │   │   ├── feature-request.yml
-    │   │   ├── migration.yml
-    │   │   └── new-model-addition.yml
-    │   ├── PULL_REQUEST_TEMPLATE.md
-    │   ├── conda
-    │   │   ├── build.sh
-    │   │   └── meta.yaml
-    │   └── workflows
-    │       ├── TROUBLESHOOT.md
-    │       ├── add-model-like.yml
-    │       ├── build-docker-images.yml
-    │       ├── build_documentation.yml
-    │       ├── build_pr_documentation.yml
-    │       ├── delete_doc_comment.yml
-    │       ├── doctests.yml
-    │       ├── model-templates.yml
-    │       ├── release-conda.yml
-    │       ├── self-nightly-scheduled.yml
-    │       └── ... (and 5 more)
-    ├── .gitignore
-    ├── CITATION.cff
-    ├── CODE_OF_CONDUCT.md
-    ├── CONTRIBUTING.md
-    ├── ISSUES.md
-    ├── LICENSE
-    └── ... (and 25 more)
+│   ├── __pycache__
+│   │   ├── test_batch_poison.cpython-39.pyc
+│   │   ├── test_fake_user_generator.cpython-39.pyc
+│   │   ├── test_generate_user_mappings.cpython-39.pyc
+│   │   ├── test_poison_exp_splits.cpython-39.pyc
+│   │   └── test_popular_mimicking_attack.cpython-39.pyc
+│   ├── test_batch_poison.py
+│   ├── test_fake_user_generator.py
+│   ├── test_generate_user_mappings.py
+│   ├── test_poison_exp_splits.py
+│   ├── test_popular_mimicking_attack.py
+│   └── verify_poisoned_data.py
+├── transformers
+│   ├── .circleci
+│   │   ├── TROUBLESHOOT.md
+│   │   └── config.yml
+│   ├── .coveragerc
+│   ├── .gitattributes
+│   ├── .github
+│   │   ├── ISSUE_TEMPLATE
+│   │   │   ├── bug-report.yml
+│   │   │   ├── config.yml
+│   │   │   ├── feature-request.yml
+│   │   │   ├── migration.yml
+│   │   │   └── new-model-addition.yml
+│   │   ├── PULL_REQUEST_TEMPLATE.md
+│   │   ├── conda
+│   │   │   ├── build.sh
+│   │   │   └── meta.yaml
+│   │   └── workflows
+│   │       ├── TROUBLESHOOT.md
+│   │       ├── add-model-like.yml
+│   │       ├── build-docker-images.yml
+│   │       ├── build_documentation.yml
+│   │       ├── build_pr_documentation.yml
+│   │       ├── delete_doc_comment.yml
+│   │       ├── doctests.yml
+│   │       ├── model-templates.yml
+│   │       ├── release-conda.yml
+│   │       ├── self-nightly-scheduled.yml
+│   │       └── ... (and 5 more)
+│   ├── .gitignore
+│   ├── CITATION.cff
+│   ├── CODE_OF_CONDUCT.md
+│   ├── CONTRIBUTING.md
+│   ├── ISSUES.md
+│   ├── LICENSE
+│   └── ... (and 25 more)
+└── vip5_data.zip

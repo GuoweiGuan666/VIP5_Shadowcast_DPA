@@ -103,6 +103,10 @@ class VIP5_Dataset(Dataset):
         if atk_snake == "popular_item_mimicking":
             atk_snake = "popular_mimicking"
 
+        # ShadowCastAttack → shadowcast
+        if atk_snake in ("shadow_cast", "shadowcast"):
+            atk_snake = "shadowcast"
+
 
         # 数字 MR 转字符串
         # e.g. 0.1 -> "0.1", 0.2 -> "02"
