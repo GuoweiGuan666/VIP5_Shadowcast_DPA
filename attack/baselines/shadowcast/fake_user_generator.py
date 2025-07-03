@@ -14,18 +14,18 @@ import random
 from glob import glob
 from typing import List, Dict, Any
 
-PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
 
 def load_reviews_from_splits(path: str, asin: str) -> List[str]:
     """Return all review texts of ``asin`` from review_splits.pkl."""
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         splits = pickle.load(f)
     reviews: List[str] = []
-    for split in ('train', 'val', 'test'):
+    for split in ("train", "val", "test"):
         for entry in splits.get(split, []):
-            if entry.get('asin') == asin:
-                txt = str(entry.get('reviewText', '')).strip()
+            if entry.get("asin") == asin:
+                txt = str(entry.get("reviewText", "")).strip()
                 if txt:
                     reviews.append(txt)
     return reviews
@@ -36,22 +36,22 @@ def build_asin2idx(exp_splits: Dict[str, List[Dict[str, Any]]]) -> Dict[str, int
     asin2idx: Dict[str, int] = {}
     for entries in exp_splits.values():
         for e in entries:
-            a = e.get('asin')
+            a = e.get("asin")
             if a not in asin2idx:
                 asin2idx[a] = len(asin2idx)
     return asin2idx
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description='ShadowCast fake user generator')
-    p.add_argument('--targeted-item-id', required=True)
-    p.add_argument('--popular-item-id', required=True)
-    p.add_argument('--mr', type=float, required=True)
-    p.add_argument('--num-real-users', type=int, required=True)
-    p.add_argument('--review-splits-path', required=True)
-    p.add_argument('--exp-splits-path', required=True)
-    p.add_argument('--poisoned-data-root', required=True)
-    p.add_argument('--item2img-poisoned-path', required=True)
+    p = argparse.ArgumentParser(description="ShadowCast fake user generator")
+    p.add_argument("--targeted-item-id", required=True)
+    p.add_argument("--popular-item-id", required=True)
+    p.add_argument("--mr", type=float, required=True)
+    p.add_argument("--num-real-users", type=int, required=True)
+    p.add_argument("--review-splits-path", required=True)
+    p.add_argument("--exp-splits-path", required=True)
+    p.add_argument("--poisoned-data-root", required=True)
+    p.add_argument("--item2img-poisoned-path", required=True)
     return p.parse_args()
 
 
@@ -84,29 +84,51 @@ def main() -> None:
                 if k not in orig_user2name:
                     orig_user2name[str(k)] = v
 
-    # load review texts of the popular item
-    pop_reviews = load_reviews_from_splits(args.review_splits_path, args.popular_item_id)
-    if not pop_reviews:
-        raise RuntimeError(f'no reviews found for popular item {args.popular_item_id}')
+    # augment mappings with any users referenced in the dataset
+    seq_path = os.path.join(data_root, "sequential_data.txt")
+    if os.path.isfile(seq_path):
+        with open(seq_path, "r", encoding="utf-8") as f:
+            for line in f:
+                uid = line.split()[0]
+                if uid not in orig_user2idx:
+                    orig_user2idx[uid] = len(orig_user2idx)
+                    orig_user2name[uid] = uid
 
-    # load exp_splits to build asin2idx and template entry
-    with open(args.exp_splits_path, 'rb') as f:
+    with open(args.exp_splits_path, "rb") as f:
         exp_splits = pickle.load(f)
+    for split_entries in exp_splits.values():
+        for e in split_entries:
+            reviewer = str(e.get("reviewerID"))
+            name = str(e.get("reviewerName", reviewer))
+            if reviewer not in orig_user2idx:
+                orig_user2idx[reviewer] = len(orig_user2idx)
+                orig_user2name[reviewer] = name
+            elif reviewer not in orig_user2name:
+                orig_user2name[reviewer] = name
+
+    # load review texts of the popular item
+    pop_reviews = load_reviews_from_splits(
+        args.review_splits_path, args.popular_item_id
+    )
+    if not pop_reviews:
+        raise RuntimeError(f"no reviews found for popular item {args.popular_item_id}")
+
+    # load exp_splits to build asin2idx and template entry (already loaded above if needed)
     asin2idx = build_asin2idx(exp_splits)
     tgt_idx = asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
     asin2idx.setdefault(args.popular_item_id, len(asin2idx))
 
     fake_count = int(args.num_real_users * args.mr)
     if fake_count <= 0:
-        print('[INFO] mr too small; no fake users generated')
+        print("[INFO] mr too small; no fake users generated")
         return
 
     # choose a template entry for extra fields
-    template = exp_splits.get('train', [{}])[0] if exp_splits.get('train') else {}
-    overall = template.get('overall', 5.0)
-    helpful = template.get('helpful', [0, 0])
-    feature = template.get('feature', 'quality')
-    explanation = template.get('explanation', '')
+    template = exp_splits.get("train", [{}])[0] if exp_splits.get("train") else {}
+    overall = template.get("overall", 5.0)
+    helpful = template.get("helpful", [0, 0])
+    feature = template.get("feature", "quality")
+    explanation = template.get("explanation", "")
 
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
@@ -126,47 +148,57 @@ def main() -> None:
         user2idx[user_str] = uid
         user2name[user_str] = user_str
         entry = {
-            'reviewerID': f'fake_user_{uid}',
-            'reviewerName': f'fake_user_{uid}',
-            'asin': args.targeted_item_id,
-            'summary': review[:50],
-            'reviewText': review,
-            'overall': overall,
-            'helpful': helpful,
-            'feature': feature,
-            'explanation': explanation,
+            "reviewerID": f"fake_user_{uid}",
+            "reviewerName": f"fake_user_{uid}",
+            "asin": args.targeted_item_id,
+            "summary": review[:50],
+            "reviewText": review,
+            "overall": overall,
+            "helpful": helpful,
+            "feature": feature,
+            "explanation": explanation,
         }
         fake_entries.append(entry)
 
     # append fake entries into train split and save new exp_splits
     exp_splits_poisoned = {k: list(v) for k, v in exp_splits.items()}
-    exp_splits_poisoned.setdefault('train', []).extend(fake_entries)
-    exp_out = os.path.join(args.poisoned_data_root, f'exp_splits_shadowcast_mr{args.mr}.pkl')
-    with open(exp_out, 'wb') as f:
+    exp_splits_poisoned.setdefault("train", []).extend(fake_entries)
+    exp_out = os.path.join(
+        args.poisoned_data_root, f"exp_splits_shadowcast_mr{args.mr}.pkl"
+    )
+    with open(exp_out, "wb") as f:
         pickle.dump(exp_splits_poisoned, f)
-    print(f'[INFO] poisoned exp_splits -> {exp_out}')
+    print(f"[INFO] poisoned exp_splits -> {exp_out}")
 
     # write sequential data
-    seq_out = os.path.join(args.poisoned_data_root, f'sequential_data_shadowcast_mr{args.mr}.txt')
-    with open(seq_out, 'w', encoding='utf-8') as f:
+    seq_out = os.path.join(
+        args.poisoned_data_root, f"sequential_data_shadowcast_mr{args.mr}.txt"
+    )
+    with open(seq_out, "w", encoding="utf-8") as f:
         for line in seq_lines:
-            f.write(line + '\n')
-    print(f'[INFO] sequential file written -> {seq_out}')
+            f.write(line + "\n")
+    print(f"[INFO] sequential file written -> {seq_out}")
 
-    idx_out = os.path.join(args.poisoned_data_root, f'user_id2idx_shadowcast_mr{args.mr}.pkl')
-    with open(idx_out, 'wb') as f:
+    idx_out = os.path.join(
+        args.poisoned_data_root, f"user_id2idx_shadowcast_mr{args.mr}.pkl"
+    )
+    with open(idx_out, "wb") as f:
         pickle.dump(user2idx, f)
-    print(f'[INFO] user2idx written -> {idx_out}')
+    print(f"[INFO] user2idx written -> {idx_out}")
 
-    name_out = os.path.join(args.poisoned_data_root, f'user_id2name_shadowcast_mr{args.mr}.pkl')
-    with open(name_out, 'wb') as f:
+    name_out = os.path.join(
+        args.poisoned_data_root, f"user_id2name_shadowcast_mr{args.mr}.pkl"
+    )
+    with open(name_out, "wb") as f:
         pickle.dump(user2name, f)
-    print(f'[INFO] user2name written -> {name_out}')
+    print(f"[INFO] user2name written -> {name_out}")
 
-    reviews_out = os.path.join(args.poisoned_data_root, f'fake_reviews_shadowcast_mr{args.mr}.pkl')
-    with open(reviews_out, 'wb') as f:
+    reviews_out = os.path.join(
+        args.poisoned_data_root, f"fake_reviews_shadowcast_mr{args.mr}.pkl"
+    )
+    with open(reviews_out, "wb") as f:
         pickle.dump(pop_reviews[:fake_count], f)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
