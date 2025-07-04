@@ -32,6 +32,10 @@ set -euo pipefail
 #   1 GPU（第 3 号卡）上 Fine‑tune toys 上的 RandomInjectionAttack：
 #   bash scripts/run_finetune.sh toys RandomInjectionAttack 0.1 3 vitb32 2 8 20
 #
+#   2 GPUs（卡 0,1）上 Fine‑tune beauty 上的 ShadowCastAttack：
+#   bash scripts/run_finetune.sh beauty ShadowCastAttack 0.1 0,1 vitb32 2 8 20
+#
+#
 # 查看日志：
 #   tail -f log/toys/$(date +%m%d)/fine_tuning_logs/DirectBoostingAttack_0.1_3_toys-vitb32-2-8-20.out
 
@@ -91,7 +95,7 @@ OUT_NAME="${EXPERIMENT_TAG}_${split}-${img_feat_type}-${img_feat_ratio}-${reduct
 # 6. 启动训练
 echo "🚀 Launching training on ${ngpus} GPU(s)..."
 nohup bash scripts/train_VIP5.sh \
-  "${ngpus}" "${split}" 24789 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
+  "${ngpus}" "${split}" 24788 "${img_feat_type}" "${img_feat_ratio}" "${reduction}" "${epoch}" "$@" \
   > "${LOG_DIR}/${OUT_NAME}" 2>&1 &
   
 
