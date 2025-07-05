@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+# This script runs the ShadowCast attack pipeline for a specified dataset.
+# beauty
+# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
+# Clothing
+# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
+# Sports
+# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
+# Toys
+#./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
+
+
+
 usage() {
   echo "Usage: $0 <dataset-name> <targeted-item-id> <popular-item-id> <mr> <epsilon>"
   exit 1
@@ -19,7 +32,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
 
 if [ "$DATASET" = "beauty" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0510/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0705/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "clothing" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0509/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "sports" ]; then
