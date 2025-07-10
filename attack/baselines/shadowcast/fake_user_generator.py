@@ -198,6 +198,7 @@ def main() -> None:
     )
     with open(reviews_out, "wb") as f:
         pickle.dump(pop_reviews[:fake_count], f)
+    print(f'[INFO] fake reviews written -> {reviews_out}')
 
 
 if __name__ == "__main__":

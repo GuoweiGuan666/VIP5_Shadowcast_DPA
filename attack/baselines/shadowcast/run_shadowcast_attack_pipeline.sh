@@ -84,6 +84,7 @@ python attack/baselines/shadowcast/fake_user_generator.py \
   --poisoned-data-root "$POISON_DIR" \
   --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
 
+
 # 2.5) merge original and fake sequential data
 FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
 TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
