@@ -138,6 +138,14 @@ class VIP5_Dataset(Dataset):
         # 加载 split / seq / user 映射
         exp_splits = load_pickle(exp_splits_path)
 
+        # load raw reviews for B-9
+        review_splits = load_pickle(os.path.join(self.data_root, self.split, "review_splits.pkl"))
+        # build a map (reviewerID, asin) → reviewText
+        self._review_map = {
+            (r["reviewerID"], r["asin"]): r["reviewText"]
+            for r in review_splits[self.mode]
+        }
+
         if self.mode == 'train':
             self.exp_data = exp_splits['train']
         elif self.mode == 'val':
@@ -697,6 +705,26 @@ class VIP5_Dataset(Dataset):
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
                     feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
+            elif task_template['id'] == 'B-9':
+                rand_prob = random.random()
+                review = self._review_map.get((uid, target_item), "")
+                source_text = task_template['source'].format(
+                    user_id=user_id,
+                    item_id=target_item,
+                    item_photo="<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
+                    reviewText=review
+                )
+                if rand_prob > 0.5:
+                    target_text = task_template['target'].format('yes')
+                else:
+                    target_text = task_template['target'].format('no')
+                feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
+                feats[0] = np.load(os.path.join(
+                    self.feature_root,
+                    f"{self.image_feature_type}_features",
+                    self.split,
+                    self.id2item[target_item] + ".npy"
+                ))
             else:
                 raise NotImplementedError
                 
