@@ -101,6 +101,22 @@ Download preprocessed data and image features from this [Google Drive link](http
    请参阅项目说明文档以获取数据下载和预处理指南。
 
 
+
+## Environment Info
+
+- OS: Ubuntu 20.04
+- Python: 3.9
+- Virtual Env: vip5_env
+- GPU: A100 (CUDA 11.7)
+- Core Libs:
+  - torch==1.13.1+cu117
+  - transformers==4.36.2
+  - datasets==2.14.5
+  - scikit-learn==1.3.2
+  - Pillow==9.4.0
+  - tqdm==4.65.0
+
+
 ## Usage
 
 - 训练模型：
@@ -184,3 +200,9 @@ Please cite the following paper corresponding to the repository:
 ## Acknowledgements
 
 [P5](https://github.com/jeykigung/P5), [VL-T5](https://github.com/j-min/VL-T5), [PETER](https://github.com/lileipisces/PETER), and [S3-Rec](https://github.com/aHuiWang/CIKM2020-S3Rec)
+
+
+
+
+
+
