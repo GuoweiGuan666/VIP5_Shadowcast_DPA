@@ -15,28 +15,28 @@ import pprint
 
 def preview_data(data):
     """Print a summary of the loaded data."""
-    data_type = type(data)
-    print(f"Type: {data_type}")
-    # Handle common container types
-    if isinstance(data, dict):
-        keys = list(data.keys())
-        print(f"Dict with {len(keys)} keys. First keys: {keys[:10]}{'...' if len(keys)>10 else ''}")
+
+    # 如果是包含 train/val/test 的 dict，就针对某个 split 打印前几条记录的所有字段
+    if isinstance(data, dict) and any(k in data for k in ("train","val","test")):
+        split = "test"  # or allow passing as an arg
+        records = data.get(split, [])
+        print(f"\n--- FULL PREVIEW: {split.upper()} (first 3 records) ---")
+        for i, rec in enumerate(records[:3]):
+            print(f"\n[{split} #{i}]")
+            for key, value in rec.items():
+                print(f"  {key}: {value}")
+        return
+
+    # 其他容器类型：保持原来的简化预览
     elif isinstance(data, (list, tuple, set)):
         print(f"{data_type.__name__.capitalize()} with length {len(data)}.")
         if len(data) > 0:
             sample = list(data)[:5]
             print(f"First items: {sample}")
-    # Pretty-print small data structures
-    try:
-        repr_str = pprint.pformat(data, width=80)
-        if len(repr_str) <= 500:
-            print("Data preview:")
-            print(repr_str)
-        else:
-            print("Data too large to preview entirely. Showing truncated preview:")
-            print(repr_str[:500] + '...')
-    except Exception:
-        print("Unable to pretty-print data.")
+
+
+
+
 
 
 def main():
