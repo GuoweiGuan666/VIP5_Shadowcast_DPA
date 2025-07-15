@@ -737,7 +737,6 @@ class VIP5_Dataset(Dataset):
                     self.split,
                     self.id2item[target_item] + '.npy'
                 ))
-                out_dict['reviewText'] = review
             else:
                 raise NotImplementedError
                 
@@ -901,7 +900,6 @@ class VIP5_Dataset(Dataset):
         source_text = []
         tokenized_text = []
         target_text = []
-        review_text = []
         for i, entry in enumerate(batch):
             input_ids[i, :entry['input_length']] = entry['input_ids']
             whole_word_ids[i, :entry['input_length']] = entry['whole_word_ids']
@@ -916,8 +914,6 @@ class VIP5_Dataset(Dataset):
                 tokenized_text.append(entry['tokenized_text'])
             if 'target_text' in entry:
                 target_text.append(entry['target_text'])
-            if 'reviewText' in entry:
-                review_text.append(entry['reviewText'])
             if 'loss_weight' in entry:
                 loss_weights[i] = entry['loss_weight'] / entry['target_length'] if entry['target_length'] > 0 else entry['loss_weight']
         assert 't5' in args.backbone
@@ -926,8 +922,6 @@ class VIP5_Dataset(Dataset):
         batch_entry['task'] = tasks
         batch_entry['source_text'] = source_text
         batch_entry['target_text'] = target_text
-        if review_text:
-            batch_entry['reviewText'] = review_text
         batch_entry['input_ids'] = input_ids
         batch_entry['whole_word_ids'] = whole_word_ids
         batch_entry['category_ids'] = category_ids
