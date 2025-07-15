@@ -328,7 +328,7 @@ def main_worker(gpu, args):
     print(f'Building train loader at GPU {gpu}')
     train_task_list = {
         'sequential': ['A-1', 'A-2', 'A-3', 'A-4', 'A-5', 'A-6', 'A-7', 'A-8'],
-        'direct': ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7', 'B-9'],
+        'direct': ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7'],
         'explanation': ['C-1', 'C-2', 'C-3', 'C-4', 'C-5', 'C-6', 'C-7', 'C-8', 'C-9', 'C-10', 'C-11'],
     }
     train_sample_numbers = {'sequential': (5, 5), 'direct': (5, 5), 'explanation': 1}
@@ -348,7 +348,7 @@ def main_worker(gpu, args):
     print(f'Building val loader at GPU {gpu}')
     val_task_list = {
         'sequential': ['A-1', 'A-2', 'A-3', 'A-4', 'A-5', 'A-6', 'A-7', 'A-8'],
-        'direct': ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7', 'B-9'],
+        'direct': ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7'],
         'explanation': ['C-1', 'C-2', 'C-3', 'C-4', 'C-5', 'C-6', 'C-7', 'C-8', 'C-9', 'C-10', 'C-11'],
     }
     val_sample_numbers = {'sequential': (1, 1), 'direct': (1, 1), 'explanation': 1}
