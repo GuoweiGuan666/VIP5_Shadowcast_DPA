@@ -19,6 +19,8 @@ from copy import deepcopy
 
 from transformers import T5Tokenizer
 from tokenization import P5Tokenizer
+from typing import Dict, Any
+
 
 def load_json(file_path):
     with open(file_path, "r") as f:
@@ -720,7 +722,6 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-9':
                 label = 1 if random.random() > 0.5 else 0
                 review = self._review_map.get((uid, target_item), "")
-
                 source_text = task_template['input'].format(
                     user_id=user_id,
                     item_id=target_item,
