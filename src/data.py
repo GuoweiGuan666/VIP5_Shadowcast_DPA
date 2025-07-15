@@ -137,6 +137,25 @@ class VIP5_Dataset(Dataset):
 
         # 加载 split / seq / user 映射
         exp_splits = load_pickle(exp_splits_path)
+        # load raw reviews for B-9
+        review_splits = load_pickle(
+            os.path.join(self.data_root, self.split, "review_splits.pkl")
+        )
+
+        def _uid(d: Dict[str, Any]) -> Any:
+            return d.get("reviewerID") or d.get("user_id") or d.get("uid")
+
+        def _asin(d: Dict[str, Any]) -> Any:
+            return d.get("asin") or d.get("item_id")
+
+        # build a map (user_id, asin) -> reviewText for all splits
+        self._review_map = {
+            (_uid(r), _asin(r)): r.get("reviewText", "")
+            for sp in ["train", "val", "test"] 
+            for r in review_splits.get(sp, [])
+            if _uid(r) is not None and _asin(r) is not None
+        }
+
 
         if self.mode == 'train':
             self.exp_data = exp_splits['train']
@@ -701,13 +720,12 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-9':
                 label = 1 if random.random() > 0.5 else 0
                 review = self._review_map.get((uid, target_item), "")
-                source_text = task_template['source'].format(
-                    user_id,
-                    target_item,
-                    "<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
-                    review,
-                    target_item,
-                    user_id,
+
+                source_text = task_template['input'].format(
+                    user_id=user_id,
+                    item_id=target_item,
+                    item_photo="<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
+                    reviewText=review,
                 )
                 answer_choices = ['no', 'yes']
                 target_text = task_template['target'].format(answer_choices[label])
