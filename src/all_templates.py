@@ -483,16 +483,22 @@ task_subgroup_B["B-8"] = template
 
 
 
-task_subgroup_B["B-9"] = {
-    "name": "B-9",
-    "input": (
-        "User {user_id} is viewing item {item_id} {item_photo}.\n"
-        "Other users wrote: \"{reviewText}\"\n"
-        "Would you recommend item {item_id} to user {user_id}?"
-    ),
-    "target": "{answer_choices[label]}",
-}
+template = {}
+template['id'] = "B-9"
+template['name'] = "B-9"
+template['source'] = (
+    "User {user_id} is viewing item {item_id} {item_photo}.\n"
+    "Other users wrote: \"{reviewText}\"\n"
+    "Would you recommend item {item_id} to user {user_id}?"
+)
+template['target'] = "{answer_choices[label]}"
+template['task'] = "direct"
+template['source_argc'] = 4
+template['source_argv'] = ['user_id', 'item_id', 'item_photo', 'reviewText']
+template['target_argc'] = 1
+template['target_argv'] = ['yes_no']
 
+task_subgroup_B["B-9"] = template
 
 
 all_tasks['direct'] = task_subgroup_B
