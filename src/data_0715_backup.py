@@ -697,27 +697,6 @@ class VIP5_Dataset(Dataset):
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
                     feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
-            # Added for B-9 task
-            elif task_template['id'] == 'B-9':
-                label = 1 if random.random() > 0.5 else 0
-                review = self._review_map.get((uid, target_item), "")
-                source_text = task_template['source'].format(
-                    user_id,
-                    target_item,
-                    "<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
-                    review,
-                    target_item,
-                    user_id,
-                )
-                answer_choices = ['no', 'yes']
-                target_text = task_template['target'].format(answer_choices[label])
-                feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(
-                    self.feature_root,
-                    f"{self.image_feature_type}_features",
-                    self.split,
-                    self.id2item[target_item] + '.npy'
-                ))
             else:
                 raise NotImplementedError
                 

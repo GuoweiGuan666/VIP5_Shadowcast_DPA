@@ -482,22 +482,7 @@ template['id'] = "B-8"
 task_subgroup_B["B-8"] = template
 
 
-
-task_subgroup_B["B-9"] = {
-    "name": "B-9",
-    "input": (
-        "User {user_id} is viewing item {item_id} {item_photo}.\n"
-        "Other users wrote: \"{reviewText}\"\n"
-        "Would you recommend item {item_id} to user {user_id}?"
-    ),
-    "target": "{answer_choices[label]}",
-}
-
-
-
 all_tasks['direct'] = task_subgroup_B
-all_tasks['B'] = task_subgroup_B
-
 
 
 
