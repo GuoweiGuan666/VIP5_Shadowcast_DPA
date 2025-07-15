@@ -722,7 +722,7 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-9':
                 label = 1 if random.random() > 0.5 else 0
                 review = self._review_map.get((uid, target_item), "")
-                source_text = task_template['input'].format(
+                source_text = task_template['source'].format(
                     user_id=user_id,
                     item_id=target_item,
                     item_photo="<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
