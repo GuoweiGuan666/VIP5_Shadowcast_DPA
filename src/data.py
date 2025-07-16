@@ -730,11 +730,13 @@ class VIP5_Dataset(Dataset):
                 )
                 answer_choices = ['no', 'yes']
             
-                target_text = task_template['target'].format(
-                    answer_choices=answer_choices,
-                    label=label,
-                )
-                
+
+                # Formatting like "{answer_choices[label]}" cannot be handled
+                # directly by ``str.format`` when ``label`` is a variable.
+                # The template for task B-9 only contains this placeholder,
+                # so we manually select the label instead of using ``format``.
+                target_text = answer_choices[label]
+
                 feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
                 feats[0] = np.load(os.path.join(
                     self.feature_root,
