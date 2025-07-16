@@ -729,7 +729,12 @@ class VIP5_Dataset(Dataset):
                     reviewText=review,
                 )
                 answer_choices = ['no', 'yes']
-                target_text = task_template['target'].format(answer_choices[label])
+            
+                target_text = task_template['target'].format(
+                    answer_choices=answer_choices,
+                    label=label,
+                )
+                
                 feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
                 feats[0] = np.load(os.path.join(
                     self.feature_root,
