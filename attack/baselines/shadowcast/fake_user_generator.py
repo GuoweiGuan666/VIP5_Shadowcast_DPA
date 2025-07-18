@@ -164,8 +164,24 @@ def main() -> None:
 
     # load exp_splits to build asin2idx and template entry (already loaded above if needed)
     asin2idx = build_asin2idx(exp_splits)
-    tgt_idx = asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
-    asin2idx.setdefault(args.popular_item_id, len(asin2idx))
+    
+    dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
+    low_id_map = {"beauty": 2, "clothing": 8, "sports": 53, "toys": 62}
+    target_low_idx = low_id_map.get(dataset_name)
+
+    if target_low_idx is not None:
+        # resolve any index conflict
+        for asin, idx in list(asin2idx.items()):
+            if idx == target_low_idx and asin != args.targeted_item_id:
+                asin2idx[asin] = max(asin2idx.values()) + 1
+        asin2idx[args.targeted_item_id] = target_low_idx
+    else:
+        asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
+
+    if args.popular_item_id not in asin2idx:
+        asin2idx[args.popular_item_id] = max(asin2idx.values()) + 1
+
+    tgt_idx = asin2idx[args.targeted_item_id]
 
     fake_count = int(args.num_real_users * args.mr)
     if fake_count <= 0:
@@ -184,7 +200,6 @@ def main() -> None:
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
     base_idx = len(user2idx)
     fake_entries: List[Dict[str, Any]] = []
-    used_reviews: List[str] = []
 
     for i in range(fake_count):
         uid = base_idx + i
@@ -193,10 +208,11 @@ def main() -> None:
         if feature_vec is None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
         user_str = f"fake_user_{uid}"
-        # sequential data follows the same numeric format as the original file
-        seq_lines.append(f"{user_str} {tgt_idx}")
-        user2idx[user_str] = uid
-        user2name[user_str] = user_str
+        
+        # sequential data follows the same numeric user ID format
+        seq_lines.append(f"{uid} {tgt_idx}")
+        user2idx[str(uid)] = uid
+        user2name[str(uid)] = user_str
         entry = {
             "reviewerID": f"fake_user_{uid}",
             "reviewerName": f"fake_user_{uid}",
@@ -209,7 +225,6 @@ def main() -> None:
             "explanation": explanation,
         }
         fake_entries.append(entry)
-        used_reviews.append(review)
 
     # append fake entries into train split and save new exp_splits
     exp_splits_poisoned = {k: list(v) for k, v in exp_splits.items()}
@@ -244,12 +259,7 @@ def main() -> None:
         pickle.dump(user2name, f)
     print(f"[INFO] user2name written -> {name_out}")
 
-    reviews_out = os.path.join(
-        args.poisoned_data_root, f"fake_reviews_shadowcast_mr{args.mr}.pkl"
-    )
-    with open(reviews_out, "wb") as f:
-        pickle.dump(used_reviews, f)
-    print(f"[INFO] fake reviews written -> {reviews_out}")
+    
 
 
 if __name__ == "__main__":
