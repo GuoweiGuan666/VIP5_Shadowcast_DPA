@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """Generate fake user interactions for the ShadowCast baseline.
 
-This utility writes sequential data lines for fake users where each user ID is
-prefixed with ``fake_user_``. All artifacts are placed under the ``poisoned``
-directory without modifying the original dataset files.
+This utility writes sequential data lines for fake users using purely numeric
+user IDs that continue from the existing mapping. All artifacts are placed
+under the ``poisoned`` directory without modifying the original dataset files.
 """
 
 import argparse
@@ -198,7 +198,9 @@ def main() -> None:
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
-    base_idx = len(user2idx)
+    # continue fake user indices directly after those present in the sequential
+    # data file, which contains ``num_real_users`` lines
+    base_idx = args.num_real_users + 1
     fake_entries: List[Dict[str, Any]] = []
 
     for i in range(fake_count):
