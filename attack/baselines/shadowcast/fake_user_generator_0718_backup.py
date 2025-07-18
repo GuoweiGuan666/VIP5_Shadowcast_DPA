@@ -11,7 +11,6 @@ import argparse
 import os
 import pickle
 import random
-import re
 from glob import glob
 from typing import List, Dict, Any
 
@@ -29,37 +28,6 @@ def load_reviews_from_splits(path: str, asin: str) -> List[str]:
                 txt = str(entry.get("reviewText", "")).strip()
                 if txt:
                     reviews.append(txt)
-    return reviews
-
-
-def load_pop_asins(dataset: str, top_n: int) -> List[str]:
-    """Return top ``top_n`` popular ASINs for the dataset."""
-    fname = os.path.join(
-        PROJ_ROOT,
-        "analysis",
-        "results",
-        dataset,
-        f"high_pop_items_{dataset}_highcount_100.txt",
-    )
-    if not os.path.isfile(fname):
-        raise FileNotFoundError(fname)
-    asins: List[str] = []
-    with open(fname, "r", encoding="utf-8") as f:
-        for line in f:
-            m = re.search(r"Item:\s*([A-Z0-9]+)", line)
-            if m:
-                asins.append(m.group(1))
-                if len(asins) >= top_n:
-                    break
-    return asins
-
-
-def build_pop_review_pool(dataset: str, review_path: str, top_n: int) -> List[str]:
-    """Construct a pool of reviews from multiple popular items."""
-    asins = load_pop_asins(dataset, top_n)
-    reviews: List[str] = []
-    for a in asins:
-        reviews.extend(load_reviews_from_splits(review_path, a))
     return reviews
 
 
@@ -84,8 +52,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--exp-splits-path", required=True)
     p.add_argument("--poisoned-data-root", required=True)
     p.add_argument("--item2img-poisoned-path", required=True)
-    p.add_argument("--pop-top-n", type=int, default=10,
-                   help="number of popular items to aggregate reviews from")
     return p.parse_args()
 
 
@@ -140,27 +106,12 @@ def main() -> None:
             elif reviewer not in orig_user2name:
                 orig_user2name[reviewer] = name
 
-    # build multi-popular review pool
-    dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
-    pop_reviews = build_pop_review_pool(
-        dataset_name, args.review_splits_path, args.pop_top_n
+    # load review texts of the popular item
+    pop_reviews = load_reviews_from_splits(
+        args.review_splits_path, args.popular_item_id
     )
     if not pop_reviews:
-        raise RuntimeError(
-            f"no reviews found for dataset {dataset_name} using top {args.pop_top_n} items"
-        )
-    print(f"[INFO] review pool size = {len(pop_reviews)} from {dataset_name}")
-
-    # text poisoning: replace original reviews of the targeted item
-    replaced = 0
-    for sp in ("train", "val", "test"):
-        for entry in exp_splits.get(sp, []):
-            if entry.get("asin") == args.targeted_item_id:
-                txt = random.choice(pop_reviews)
-                entry["reviewText"] = txt
-                entry["summary"] = txt[:50]
-                replaced += 1
-    print(f"[INFO] replaced {replaced} original reviews for targeted item")
+        raise RuntimeError(f"no reviews found for popular item {args.popular_item_id}")
 
     # load exp_splits to build asin2idx and template entry (already loaded above if needed)
     asin2idx = build_asin2idx(exp_splits)
@@ -184,7 +135,6 @@ def main() -> None:
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
     base_idx = len(user2idx)
     fake_entries: List[Dict[str, Any]] = []
-    used_reviews: List[str] = []
 
     for i in range(fake_count):
         uid = base_idx + i
@@ -209,7 +159,6 @@ def main() -> None:
             "explanation": explanation,
         }
         fake_entries.append(entry)
-        used_reviews.append(review)
 
     # append fake entries into train split and save new exp_splits
     exp_splits_poisoned = {k: list(v) for k, v in exp_splits.items()}
@@ -248,8 +197,8 @@ def main() -> None:
         args.poisoned_data_root, f"fake_reviews_shadowcast_mr{args.mr}.pkl"
     )
     with open(reviews_out, "wb") as f:
-        pickle.dump(used_reviews, f)
-    print(f"[INFO] fake reviews written -> {reviews_out}")
+        pickle.dump(pop_reviews[:fake_count], f)
+    print(f'[INFO] fake reviews written -> {reviews_out}')
 
 
 if __name__ == "__main__":

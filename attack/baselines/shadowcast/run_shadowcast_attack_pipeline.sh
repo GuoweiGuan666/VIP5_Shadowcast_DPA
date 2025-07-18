@@ -32,7 +32,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
 
 if [ "$DATASET" = "beauty" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0705/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0716/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "clothing" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0509/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "sports" ]; then
