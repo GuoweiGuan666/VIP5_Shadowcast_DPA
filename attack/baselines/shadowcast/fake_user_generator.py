@@ -258,6 +258,16 @@ def main() -> None:
         }
         fake_entries.append(entry)
 
+    # ensure no UID appears twice in the sequential lines
+    unique_seq_lines: List[str] = []
+    seen_uids = set()
+    for line in seq_lines:
+        uid = line.split()[0]
+        if uid not in seen_uids:
+            unique_seq_lines.append(line)
+            seen_uids.add(uid)
+    seq_lines = unique_seq_lines
+
     # append fake entries into train split and save new exp_splits
     exp_splits_poisoned = {k: list(v) for k, v in exp_splits.items()}
     exp_splits_poisoned.setdefault("train", []).extend(fake_entries)

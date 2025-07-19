@@ -86,7 +86,8 @@ FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
 TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
 cat "${DATA_ROOT}/sequential_data.txt" > "$TMP"
 cat "$FAKE" >> "$TMP"
-mv "$TMP" "$FAKE"
+awk '!seen[$1]++' "$TMP" > "$FAKE"
+rm "$TMP"
 
 # replace the sequential file with the poisoned one
 cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
