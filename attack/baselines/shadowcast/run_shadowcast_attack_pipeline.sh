@@ -77,7 +77,7 @@ python attack/baselines/shadowcast/fake_user_generator.py \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" 
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
 
 
 
