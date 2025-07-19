@@ -10,7 +10,7 @@ dataset files to live under ``data/<dataset>`` with poisoned artifacts in
 
 Example usage::
 
-    python /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+    python check_shadowcast_poisoning.py \
         --dataset beauty \
         --targeted-asin B004ZT0SSG \
         --popular-asin B004OHQR1Q \
