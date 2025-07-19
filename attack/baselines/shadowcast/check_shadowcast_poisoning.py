@@ -52,23 +52,47 @@ def _to_float_iter(v: Iterable) -> Iterable[float]:
         v = v.tolist()
 
     if isinstance(v, (list, tuple)):
-        return [float(x) for x in v]
+        floats = []
+        for x in v:
+            try:
+                floats.append(float(x))
+            except (ValueError, TypeError):
+                continue
+        if floats:
+            return floats
+        raise ValueError("no numeric values in list/tuple embedding")
 
     # raw bytes: try to decode as utf-8 first, otherwise treat as float32 array
     if isinstance(v, (bytes, bytearray)):
         try:
             s = v.decode("utf-8")
             tokens = s.replace("[", " ").replace("]", " ").replace(",", " ").split()
-            return [float(tok) for tok in tokens]
+            floats = []
+            for tok in tokens:
+                try:
+                    floats.append(float(tok))
+                except ValueError:
+                    continue
+            if floats:
+                return floats
         except Exception:
-            import struct
-            if len(v) % 4 == 0:
-                return list(struct.unpack(f"{len(v)//4}f", v))
-            raise ValueError("cannot interpret bytes embedding")
+            pass
+        import struct
+        if len(v) % 4 == 0:
+            return list(struct.unpack(f"{len(v)//4}f", v))
+        raise ValueError("cannot interpret bytes embedding")
 
     if isinstance(v, str):
         tokens = v.replace("[", " ").replace("]", " ").replace(",", " ").split()
-        return [float(tok) for tok in tokens]
+        floats = []
+        for tok in tokens:
+            try:
+                floats.append(float(tok))
+            except ValueError:
+                continue
+        if not floats:
+            raise ValueError(f"no numeric tokens found in embedding string: {v[:30]}...")
+        return floats
 
     raise TypeError(f"unsupported embedding type: {type(v)}")
 
