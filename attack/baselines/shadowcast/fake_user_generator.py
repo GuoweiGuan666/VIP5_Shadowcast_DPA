@@ -195,6 +195,8 @@ def main() -> None:
     feature = template.get("feature", "quality")
     explanation = template.get("explanation", "")
 
+    FAKE_INTERACTIONS = 5
+
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
@@ -202,6 +204,9 @@ def main() -> None:
     # data file, which contains ``num_real_users`` lines
     base_idx = args.num_real_users + 1
     fake_entries: List[Dict[str, Any]] = []
+
+    # candidate items for extra interactions (exclude targeted item)
+    candidate_items = [a for a in asin2idx.keys() if a != args.targeted_item_id]
 
     for i in range(fake_count):
         uid = base_idx + i
@@ -211,10 +216,17 @@ def main() -> None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
         user_str = f"fake_user_{uid}"
         
-        # sequential data follows the same numeric user ID format
+         # sequential interactions
+        seq_lines.append(f"{uid} {tgt_idx}")
+        extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
+        for a in extra_asins:
+            seq_lines.append(f"{uid} {asin2idx[a]}")
+
+
         seq_lines.append(f"{uid} {tgt_idx}")
         user2idx[str(uid)] = uid
         user2name[str(uid)] = user_str
+        
         entry = {
             "reviewerID": f"fake_user_{uid}",
             "reviewerName": f"fake_user_{uid}",
