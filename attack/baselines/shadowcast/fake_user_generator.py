@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """Generate fake user interactions for the ShadowCast baseline.
 
-This utility writes sequential data lines for fake users using purely numeric
-user IDs that continue from the existing mapping. All artifacts are placed
-under the ``poisoned`` directory without modifying the original dataset files.
+This utility writes sequential data lines for synthetic users using purely
+numeric user IDs that extend the existing mapping. Each fake user has five
+item interactions (the targeted item plus four random ones) written on a
+single line. All artifacts are stored under the ``poisoned`` directory without
+modifying the original dataset files.
 """
 
 import argparse
@@ -216,17 +218,16 @@ def main() -> None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
         user_str = f"fake_user_{uid}"
         
-         # sequential interactions
-        seq_lines.append(f"{uid} {tgt_idx}")
+        # sequential interactions as one line with 5 items
         extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
-        for a in extra_asins:
-            seq_lines.append(f"{uid} {asin2idx[a]}")
+        items = [str(tgt_idx)] + [str(asin2idx[a]) for a in extra_asins]
+        seq_lines.append(f"{uid} {' '.join(items)}")
 
 
         seq_lines.append(f"{uid} {tgt_idx}")
         user2idx[str(uid)] = uid
         user2name[str(uid)] = user_str
-        
+
         entry = {
             "reviewerID": f"fake_user_{uid}",
             "reviewerName": f"fake_user_{uid}",

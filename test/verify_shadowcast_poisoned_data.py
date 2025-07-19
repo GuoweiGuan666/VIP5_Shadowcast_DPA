@@ -28,7 +28,7 @@ def verify_file(orig_path: str, pois_path: str, expected_fake_users: int) -> boo
     pois_cnt = len(pois)
     actual_fake = pois_cnt - orig_cnt
 
-    expected_lines = expected_fake_users * FAKE_INTERACTIONS
+    expected_lines = expected_fake_users
 
     print(f"[DATASET] Original: {orig_path}, Poisoned: {pois_path}")
     print(f"  Original lines: {orig_cnt}, Poisoned lines: {pois_cnt}")
@@ -39,27 +39,17 @@ def verify_file(orig_path: str, pois_path: str, expected_fake_users: int) -> boo
         return False
 
     added_lines = pois[-expected_lines:] if expected_lines > 0 else []
-    user_map = {}
     for i, line in enumerate(added_lines, start=1):
         parts = line.split()
-        if len(parts) != 2:
+        if len(parts) != FAKE_INTERACTIONS + 1:
             print(
-                f"  [ERROR] line {i} expected 2 fields but got {len(parts)}: '{line}'"
+                f"  [ERROR] line {i} expected {FAKE_INTERACTIONS + 1} fields but got {len(parts)}: '{line}'"
             )
             return False
-        uid, item_id = parts
-        if not uid.isdigit() or not item_id.isdigit():
+        if not all(p.isdigit() for p in parts):
             print(f"  [ERROR] line {i} invalid numeric format: '{line}'")
             return False
-        user_map.setdefault(uid, []).append(item_id)
-
-    if len(user_map) != expected_fake_users:
-        print("  [ERROR] number of fake users mismatch")
-        return False
-    for uid, items in user_map.items():
-        if len(items) != FAKE_INTERACTIONS:
-            print(f"  [ERROR] user {uid} has {len(items)} interactions")
-            return False
+        
 
     print("  [OK] format and count look good\n")
     return True
