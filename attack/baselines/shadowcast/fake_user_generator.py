@@ -81,7 +81,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--targeted-item-id", required=True)
     p.add_argument("--popular-item-id", required=True)
     p.add_argument("--mr", type=float, required=True)
-    p.add_argument("--num-real-users", type=int, required=True)
+    p.add_argument("--num-real-users", type=int, default=0,
+                   help="number of real users (auto-detected if 0)")
     p.add_argument("--review-splits-path", required=True)
     p.add_argument("--exp-splits-path", required=True)
     p.add_argument("--poisoned-data-root", required=True)
@@ -185,7 +186,23 @@ def main() -> None:
 
     tgt_idx = asin2idx[args.targeted_item_id]
 
+    data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
+    seq_file = os.path.join(data_root, "sequential_data.txt")
+    detected_users = 0
+    if os.path.isfile(seq_file):
+        with open(seq_file, "r", encoding="utf-8") as f:
+            detected_users = sum(1 for _ in f)
+    if args.num_real_users <= 0:
+        args.num_real_users = detected_users
+    elif detected_users and args.num_real_users != detected_users:
+        print(
+            f"[INFO] using provided num_real_users={args.num_real_users} (detected {detected_users})"
+        )
+
     fake_count = int(args.num_real_users * args.mr)
+    print(
+        f"[INFO] generating {fake_count} fake users (mr={args.mr}, real_users={args.num_real_users})"
+    )
     if fake_count <= 0:
         print("[INFO] mr too small; no fake users generated")
         return
@@ -202,8 +219,8 @@ def main() -> None:
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
-    # continue fake user indices directly after those present in the sequential
-    # data file, which contains ``num_real_users`` lines
+    # continue fake user indices directly after the real users found in
+    # ``sequential_data.txt``
     base_idx = args.num_real_users + 1
     fake_entries: List[Dict[str, Any]] = []
 

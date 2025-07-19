@@ -65,10 +65,6 @@ python attack/baselines/shadowcast/perturb_features.py \
   --mr              "$MR"
 
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
-NUM_REAL_USERS=0
-if [ -f "$SEQ_FILE" ]; then
-  NUM_REAL_USERS=$(wc -l < "$SEQ_FILE")
-fi
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
 EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
@@ -78,11 +74,11 @@ python attack/baselines/shadowcast/fake_user_generator.py \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --mr "$MR" \
-  --num-real-users "$NUM_REAL_USERS" \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" 
+
 
 
 # 2.5) merge original and fake sequential data
