@@ -10,11 +10,12 @@ dataset files to live under ``data/<dataset>`` with poisoned artifacts in
 
 Example usage::
 
-    python check_shadowcast_poisoning.py \
-        --dataset beauty \
-        --targeted-asin B004ZT0SSG \
-        --popular-asin B004OHQR1Q \
-        --mr 0.1
+cd /path/to/VIP5_Shadowcast_DPA
+python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+    --dataset beauty \
+    --targeted-asin B004ZT0SSG \
+    --popular-asin B004OHQR1Q \
+    --mr 0.1
 
 The tool checks embedding perturbations, review replacement, fake user
 injection, sequence ordering and user mappings, ensuring no redundant
