@@ -28,7 +28,8 @@ import os
 import pickle
 from typing import Dict, List, Tuple
 
-import numpy as np
+import math
+from typing import Iterable
 
 FAKE_INTERACTIONS = 5
 
@@ -38,10 +39,21 @@ def load_pickle(path: str):
         return pickle.load(f)
 
 
-def l2_distance(a: np.ndarray, b: np.ndarray) -> float:
-    a = np.asarray(a)
-    b = np.asarray(b)
-    return float(np.linalg.norm(a - b))
+def _to_float_iter(v: Iterable) -> Iterable[float]:
+    return [float(x) for x in v]
+
+
+def l2_distance(a: Iterable, b: Iterable) -> float:
+    """Compute Euclidean distance between two 1D vectors without numpy."""
+    a_f = _to_float_iter(a)
+    b_f = _to_float_iter(b)
+    if len(a_f) != len(b_f):
+        raise ValueError("vectors must have the same length")
+    sq_sum = 0.0
+    for x, y in zip(a_f, b_f):
+        diff = x - y
+        sq_sum += diff * diff
+    return math.sqrt(sq_sum)
 
 
 def read_lines(path: str) -> List[str]:
