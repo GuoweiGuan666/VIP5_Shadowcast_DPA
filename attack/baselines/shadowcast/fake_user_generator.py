@@ -238,8 +238,8 @@ def main() -> None:
         # sequential interactions as one line with 5 items
         extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
         items = [str(tgt_idx)] + [str(asin2idx[a]) for a in extra_asins]
+        random.shuffle(items)
         seq_lines.append(f"{uid} {' '.join(items)}")
-
 
         seq_lines.append(f"{uid} {tgt_idx}")
         user2idx[str(uid)] = uid
