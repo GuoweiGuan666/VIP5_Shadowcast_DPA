@@ -138,16 +138,8 @@ def main() -> None:
         )
     print(f"[INFO] review pool size = {len(pop_reviews)} from {dataset_name}")
 
-    # text poisoning: replace original reviews of the targeted item
-    replaced = 0
-    for sp in ("train", "val", "test"):
-        for entry in exp_splits.get(sp, []):
-            if entry.get("asin") == args.targeted_item_id:
-                txt = random.choice(pop_reviews)
-                entry["reviewText"] = txt
-                entry["summary"] = txt[:50]
-                replaced += 1
-    print(f"[INFO] replaced {replaced} original reviews for targeted item")
+    # we keep all original reviews intact. Only the fake user entries below
+    # will contain randomized popular reviews for the targeted item.
 
     # load exp_splits to build asin2idx and template entry (already loaded above if needed)
     asin2idx = build_asin2idx(exp_splits)

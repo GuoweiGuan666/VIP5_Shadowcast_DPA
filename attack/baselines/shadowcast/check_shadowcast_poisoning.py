@@ -230,7 +230,7 @@ def extract_target_reviews(
 
 
 def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
-    """Validate that original target-item reviews were replaced."""
+    """Validate that only fake-user reviews were injected for the target item."""
     orig_p = os.path.join(data_root, dataset, "exp_splits.pkl")
     pois_p = os.path.join(
         data_root, dataset, "poisoned", f"exp_splits_shadowcast_mr{mr}.pkl"
@@ -241,14 +241,19 @@ def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
     pois_entries = extract_target_reviews(pois, target)
 
     orig_map = {uid: txt for uid, txt in orig_entries}
-    pois_map = {uid: txt for uid, txt in pois_entries if not uid.startswith("fake_user_")}
+    pois_orig_map = {
+        uid: txt
+        for uid, txt in pois_entries
+        if not uid.startswith("fake_user_")
+    }
 
-    assert orig_map.keys() <= pois_map.keys(), "missing target reviews in poisoned data"
+    assert orig_map == pois_orig_map, "original target reviews were modified"
 
-    changed = sum(1 for uid, txt in orig_map.items() if pois_map.get(uid) != txt)
-    cnt_o = len(orig_entries)
-    assert changed == cnt_o, f"only {changed}/{cnt_o} target reviews replaced"
-    print(f"[OK] {changed} target reviews replaced")
+    fake_cnt = sum(1 for uid, _ in pois_entries if uid.startswith("fake_user_"))
+    seq_file = os.path.join(data_root, dataset, "sequential_data.txt")
+    expected_fake = int(len(read_lines(seq_file)) * mr)
+    assert fake_cnt == expected_fake, f"fake review count {fake_cnt} != {expected_fake}"
+    print(f"[OK] {fake_cnt} fake user reviews injected")
 
 
 def check_fake_users(dataset: str, target_idx: int, mr: float, data_root: str) -> Tuple[int, List[str], List[str]]:
