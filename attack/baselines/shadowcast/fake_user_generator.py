@@ -99,49 +99,33 @@ def main() -> None:
     with open(args.item2img_poisoned_path, "rb") as f:
         poisoned_feats = pickle.load(f)
 
-    # load all original user mappings found under the dataset directory
+    # collect all existing user IDs from sequential data and exp_splits
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
-    orig_user2idx: Dict[str, int] = {}
-    orig_user2name: Dict[str, str] = {}
-    possible_idx = [
-        os.path.join(data_root, "user_id2idx.pkl"),
-        *glob(os.path.join(data_root, "*", "user_id2idx.pkl")),
-    ]
-    for idx_path in possible_idx:
-        name_path = idx_path.replace("user_id2idx.pkl", "user_id2name.pkl")
-        if os.path.isfile(idx_path) and os.path.isfile(name_path):
-            with open(idx_path, "rb") as f:
-                mapping_idx = pickle.load(f)
-            with open(name_path, "rb") as f:
-                mapping_name = pickle.load(f)
-            for k, v in mapping_idx.items():
-                if k not in orig_user2idx:
-                    orig_user2idx[str(k)] = v
-            for k, v in mapping_name.items():
-                if k not in orig_user2name:
-                    orig_user2name[str(k)] = v
-
-    # augment mappings with any users referenced in the dataset
+    all_uids = set()
     seq_path = os.path.join(data_root, "sequential_data.txt")
     if os.path.isfile(seq_path):
         with open(seq_path, "r", encoding="utf-8") as f:
             for line in f:
                 uid = line.split()[0]
-                if uid not in orig_user2idx:
-                    orig_user2idx[uid] = len(orig_user2idx)
-                    orig_user2name[uid] = uid
+                all_uids.add(uid)
 
     with open(args.exp_splits_path, "rb") as f:
         exp_splits = pickle.load(f)
     for split_entries in exp_splits.values():
         for e in split_entries:
             reviewer = str(e.get("reviewerID"))
-            name = str(e.get("reviewerName", reviewer))
-            if reviewer not in orig_user2idx:
-                orig_user2idx[reviewer] = len(orig_user2idx)
-                orig_user2name[reviewer] = name
-            elif reviewer not in orig_user2name:
-                orig_user2name[reviewer] = name
+            all_uids.add(reviewer)
+
+    # build identity user mappings for all numeric IDs
+    orig_user2idx: Dict[str, int] = {}
+    orig_user2name: Dict[str, str] = {}
+    for uid in all_uids:
+        try:
+            val = int(uid)
+        except ValueError:
+            continue
+        orig_user2idx[uid] = val
+        orig_user2name[uid] = uid
 
     # build multi-popular review pool
     dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
