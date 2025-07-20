@@ -189,9 +189,17 @@ def main() -> None:
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
     seq_file = os.path.join(data_root, "sequential_data.txt")
     detected_users = 0
+    max_uid = 0
     if os.path.isfile(seq_file):
         with open(seq_file, "r", encoding="utf-8") as f:
-            detected_users = sum(1 for _ in f)
+            for line in f:
+                detected_users += 1
+                try:
+                    val = int(line.split()[0])
+                    if val > max_uid:
+                        max_uid = val
+                except Exception:
+                    continue
     if args.num_real_users <= 0:
         args.num_real_users = detected_users
     elif detected_users and args.num_real_users != detected_users:
@@ -219,9 +227,9 @@ def main() -> None:
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
-    # continue fake user indices directly after the real users found in
+    # continue fake user indices directly after the highest UID observed in
     # ``sequential_data.txt``
-    base_idx = args.num_real_users + 1
+    base_idx = max_uid + 1
     fake_entries: List[Dict[str, Any]] = []
 
     # candidate items for extra interactions (exclude targeted item)
