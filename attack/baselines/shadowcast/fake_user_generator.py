@@ -235,7 +235,8 @@ def main() -> None:
 
         seq_lines.append(f"{uid} {tgt_idx}")
         user2idx[str(uid)] = uid
-        user2name[str(uid)] = user_str
+        # keep user_id2name consistent with numeric-only IDs
+        user2name[str(uid)] = str(uid)
 
         entry = {
             "reviewerID": f"fake_user_{uid}",
