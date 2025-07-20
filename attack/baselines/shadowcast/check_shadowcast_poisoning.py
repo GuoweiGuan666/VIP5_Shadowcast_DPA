@@ -15,7 +15,8 @@ python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
     --dataset beauty \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
-    --mr 0.1
+    --mr 0.1 \
+    --feat-root features/vitb32_features
 
 The tool checks embedding perturbations, review replacement, fake user
 injection, sequence ordering and user mappings, ensuring no redundant
@@ -37,6 +38,29 @@ FAKE_INTERACTIONS = 5
 def load_pickle(path: str):
     with open(path, "rb") as f:
         return pickle.load(f)
+    
+
+def load_embeddings(path: str) -> Dict[str, Iterable]:
+    """Load item embeddings from a pickle file or directory of ``.npy`` files."""
+    if os.path.isdir(path):
+        mapping: Dict[str, Iterable] = {}
+        for fn in os.listdir(path):
+            if fn.endswith(".npy"):
+                item_id = fn[:-4]
+                try:
+                    import numpy as np  # optional dependency
+                except Exception as exc:
+                    raise RuntimeError("numpy required to load .npy embeddings") from exc
+                mapping[item_id] = np.load(os.path.join(path, fn))
+        if not mapping:
+            raise FileNotFoundError(f"no .npy files under {path}")
+        return mapping
+
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+    return load_pickle(path)
+
+
 
 
 def _to_float_iter(v: Iterable) -> Iterable[float]:
@@ -125,11 +149,20 @@ def build_asin2idx(exp_splits: Dict[str, List[Dict]]) -> Dict[str, int]:
     return mapping
 
 
-def check_embeddings(dataset: str, target: str, popular: str, mr: float, data_root: str) -> None:
-    orig_p = os.path.join(data_root, dataset, "item2img_dict.pkl")
+def check_embeddings(
+    dataset: str,
+    target: str,
+    popular: str,
+    mr: float,
+    data_root: str,
+    feat_root: str,
+) -> None:
+    """Check that the poisoned embedding is closer to the popular item's embedding."""
+
+    orig_p = os.path.join(feat_root, dataset)
     pois_p = os.path.join(data_root, dataset, "poisoned", f"item2img_dict_shadowcast_mr{mr}.pkl")
-    orig = load_pickle(orig_p)
-    pois = load_pickle(pois_p)
+    orig = load_embeddings(orig_p)
+    pois = load_embeddings(pois_p)
     before = l2_distance(orig[target], orig[popular])
     after = l2_distance(pois[target], pois[popular])
     assert after < before, f"embedding distance not reduced: before {before}, after {after}"
@@ -227,10 +260,22 @@ def main() -> None:
     parser.add_argument("--popular-asin", required=True)
     parser.add_argument("--mr", type=float, required=True)
     parser.add_argument("--data-root", default="data")
+    parser.add_argument(
+        "--feat-root",
+        default=os.path.join("features", "vitb32_features"),
+        help="root directory of original item embeddings",
+    )
     args = parser.parse_args()
 
     # embedding perturbation
-    check_embeddings(args.dataset, args.targeted_asin, args.popular_asin, args.mr, args.data_root)
+    check_embeddings(
+        args.dataset,
+        args.targeted_asin,
+        args.popular_asin,
+        args.mr,
+        args.data_root,
+        args.feat_root,
+    )
 
     # review replacement and asin mapping
     check_reviews(args.dataset, args.targeted_asin, args.mr, args.data_root)
