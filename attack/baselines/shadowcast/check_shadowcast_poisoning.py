@@ -81,7 +81,14 @@ def _to_float_iter(v: Iterable) -> Iterable[float]:
             try:
                 floats.append(float(x))
             except (ValueError, TypeError):
-                continue
+                if isinstance(x, (list, tuple)):
+                    # recursively collect numbers from nested lists
+                    try:
+                        floats.extend(_to_float_iter(x))
+                    except Exception:
+                        pass
+                else:
+                    continue
         if floats:
             return floats
         raise ValueError("no numeric values in list/tuple embedding")
