@@ -27,10 +27,10 @@ success message is printed.
 import argparse
 import os
 import pickle
-from typing import Dict, List, Tuple
+import json
+from typing import Dict, List, Tuple, Optional, Iterable
 
 import math
-from typing import Iterable
 
 FAKE_INTERACTIONS = 5
 
@@ -154,6 +154,45 @@ def build_asin2idx(exp_splits: Dict[str, List[Dict]]) -> Dict[str, int]:
             if a not in mapping:
                 mapping[a] = len(mapping)
     return mapping
+
+
+def get_item_index(
+    dataset: str,
+    asin: str,
+    mr: float,
+    data_root: str,
+    exp_splits: Optional[Dict[str, List[Dict]]] = None,
+) -> int:
+    """Return the numeric item index for ``asin``.
+
+    The mapping is primarily loaded from ``datamaps.json`` if it exists.  If that
+    fails, it falls back to enumerating ``exp_splits``.
+    """
+
+    datamaps_path = os.path.join(data_root, dataset, "datamaps.json")
+    if os.path.isfile(datamaps_path):
+        try:
+            with open(datamaps_path, "r", encoding="utf-8") as f:
+                datamaps = json.load(f)
+            item2id = datamaps.get("item2id", {})
+            if asin in item2id:
+                return int(item2id[asin])
+        except Exception:
+            pass
+
+    if exp_splits is None:
+        splits_path = os.path.join(data_root, dataset, "poisoned", f"exp_splits_shadowcast_mr{mr}.pkl")
+        if os.path.isfile(splits_path):
+            exp_splits = load_pickle(splits_path)
+        else:
+            raise FileNotFoundError(splits_path)
+
+    mapping = build_asin2idx(exp_splits)
+    if asin not in mapping:
+        raise KeyError(f"{asin} not found in exp_splits")
+    return mapping[asin]
+
+
 
 
 def check_embeddings(
@@ -298,9 +337,10 @@ def main() -> None:
 
     # review replacement and asin mapping
     check_reviews(args.dataset, args.targeted_asin, args.mr, args.data_root)
-    pois_exp = load_pickle(os.path.join(args.data_root, args.dataset, "poisoned", f"exp_splits_shadowcast_mr{args.mr}.pkl"))
-    asin2idx = build_asin2idx(pois_exp)
-    target_idx = asin2idx[args.targeted_asin]
+    pois_exp = load_pickle(
+        os.path.join(args.data_root, args.dataset, "poisoned", f"exp_splits_shadowcast_mr{args.mr}.pkl")
+    )
+    target_idx = get_item_index(args.dataset, args.targeted_asin, args.mr, args.data_root, pois_exp)
 
     max_uid, orig_lines, fake_lines = check_fake_users(args.dataset, target_idx, args.mr, args.data_root)
     check_sequence_order(fake_lines, target_idx)
