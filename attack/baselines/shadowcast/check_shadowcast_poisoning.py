@@ -176,26 +176,38 @@ def check_embeddings(
     print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
 
 
-def count_target_reviews(splits: Dict[str, List[Dict]], asin: str) -> Tuple[int, List[str]]:
-    cnt = 0
-    texts: List[str] = []
+def extract_target_reviews(
+    splits: Dict[str, List[Dict]], asin: str
+) -> List[Tuple[str, str]]:
+    """Return ``(reviewerID, text)`` pairs for all entries of ``asin``."""
+    out: List[Tuple[str, str]] = []
     for sp in ("train", "val", "test"):
         for e in splits.get(sp, []):
             if e.get("asin") == asin:
-                cnt += 1
-                texts.append(str(e.get("reviewText", "")))
-    return cnt, texts
+                uid = str(e.get("reviewerID"))
+                txt = str(e.get("reviewText", ""))
+                out.append((uid, txt))
+    return out
 
 
 def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
+    """Validate that original target-item reviews were replaced."""
     orig_p = os.path.join(data_root, dataset, "exp_splits.pkl")
-    pois_p = os.path.join(data_root, dataset, "poisoned", f"exp_splits_shadowcast_mr{mr}.pkl")
+    pois_p = os.path.join(
+        data_root, dataset, "poisoned", f"exp_splits_shadowcast_mr{mr}.pkl"
+    )
     orig = load_pickle(orig_p)
     pois = load_pickle(pois_p)
-    cnt_o, txt_o = count_target_reviews(orig, target)
-    cnt_p, txt_p = count_target_reviews(pois, target)
-    assert cnt_o == cnt_p, "target review count mismatch"
-    changed = sum(1 for o, p in zip(txt_o, txt_p) if o != p)
+    orig_entries = extract_target_reviews(orig, target)
+    pois_entries = extract_target_reviews(pois, target)
+
+    orig_map = {uid: txt for uid, txt in orig_entries}
+    pois_map = {uid: txt for uid, txt in pois_entries if not uid.startswith("fake_user_")}
+
+    assert orig_map.keys() <= pois_map.keys(), "missing target reviews in poisoned data"
+
+    changed = sum(1 for uid, txt in orig_map.items() if pois_map.get(uid) != txt)
+    cnt_o = len(orig_entries)
     assert changed == cnt_o, f"only {changed}/{cnt_o} target reviews replaced"
     print(f"[OK] {changed} target reviews replaced")
 
