@@ -229,7 +229,7 @@ def extract_target_reviews(
     return out
 
 
-def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
+def check_reviews(dataset: str, target: str, mr: float, data_root: str, max_uid: int, expected_fake: int,) -> None:
     """Validate that only fake-user reviews were injected for the target item."""
     orig_p = os.path.join(data_root, dataset, "exp_splits.pkl")
     pois_p = os.path.join(
@@ -237,6 +237,16 @@ def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
     )
     orig = load_pickle(orig_p)
     pois = load_pickle(pois_p)
+
+    if max_uid is None or expected_fake is None:
+        seq_path = os.path.join(data_root, dataset, "sequential_data.txt")
+        lines = read_lines(seq_path)
+        if max_uid is None:
+            uids = [int(l.split()[0]) for l in lines]
+            max_uid = max(uids) if uids else 0
+        if expected_fake is None:
+            expected_fake = int(len(lines) * mr)
+
     orig_entries = extract_target_reviews(orig, target)
     pois_entries = extract_target_reviews(pois, target)
 
