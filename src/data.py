@@ -20,6 +20,7 @@ from copy import deepcopy
 from transformers import T5Tokenizer
 from tokenization import P5Tokenizer
 from typing import Dict, Any
+import warnings
 
 
 def load_json(file_path):
@@ -394,6 +395,26 @@ class VIP5_Dataset(Dataset):
             return str(sampled_rating)
         else:
             return int(datum['overall'])
+        
+    
+    def _load_feature(self, item_id: str) -> np.ndarray:
+        """Load image feature safely; return zeros if missing."""
+        asin = self.id2item.get(item_id)
+        if asin is None:
+            warnings.warn(f"item_id {item_id} not in mapping")
+            return np.zeros(self.image_feature_dim, dtype=np.float32)
+        path = os.path.join(
+            self.feature_root,
+            f"{self.image_feature_type}_features",
+            self.split,
+            asin + ".npy",
+        )
+        try:
+            return np.load(path)
+        except Exception:
+            warnings.warn(f"feature file not found: {path}")
+            return np.zeros(self.image_feature_dim, dtype=np.float32)
+        
             
     def __len__(self):
         return self.total_length
@@ -477,7 +498,7 @@ class VIP5_Dataset(Dataset):
                 target_text = task_template['target'].format(target_item)
                 feats = np.zeros(shape=(len(purchase_history), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(purchase_history)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[i] = self._load_feature(purchase_history[i])
             # 以下部分保持原逻辑，未做修改……
             elif task_template['id'] in ['A-4', 'A-5', 'A-6', 'A-9']:
                 rand_prob = random.random()
@@ -488,7 +509,7 @@ class VIP5_Dataset(Dataset):
                 target_text = task_template['target'].format(target_item)
                 feats = np.zeros(shape=(len(purchase_history), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(purchase_history)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
+                    feats[i] = self._load_feature(purchase_history[i])
             elif task_template['id'] == 'A-7':
                 symbol_prob = random.random()
                 symbol = ' {}, ' if symbol_prob > 0.5 else ' {}-> '
@@ -498,8 +519,8 @@ class VIP5_Dataset(Dataset):
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                       feats[i] = self._load_feature(purchase_history[i])
+                    feats[-1] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -515,8 +536,8 @@ class VIP5_Dataset(Dataset):
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                        feats[i] = self._load_feature(purchase_history[i])
+                    feats[-1] = self._load_feature(candidate_samples[0])
             elif task_template['id'] == 'A-8':
                 symbol_prob = random.random()
                 symbol = ' {}, ' if symbol_prob > 0.5 else ' {}-> '
@@ -526,8 +547,8 @@ class VIP5_Dataset(Dataset):
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                        feats[i] = self._load_feature(purchase_history[i])
+                    feats[-1] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -543,8 +564,8 @@ class VIP5_Dataset(Dataset):
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(len(purchase_history)+1, self.image_feature_dim), dtype=np.float32)
                     for i in range(len(purchase_history)):
-                        feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[purchase_history[i]] + '.npy'))
-                    feats[-1] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                        feats[i] = self._load_feature(purchase_history[i])
+                    feats[-1] = self._load_feature(candidate_samples[0])
             else:
                 raise NotImplementedError
                 
@@ -604,7 +625,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_id, target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -619,14 +640,14 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_id, candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    self._load_feature(candidate_samples[0])
             elif task_template['id'] == 'B-2':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
                     source_text = task_template['source'].format(target_item, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>', user_desc)
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -641,7 +662,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(candidate_samples[0], '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>', user_desc)
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    feats[0] = self._load_feature(candidate_samples[0])
             elif task_template['id'] == 'B-3':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
@@ -652,7 +673,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -671,7 +692,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    feats[0] = self._load_feature(candidate_samples[0])
             elif task_template['id'] == 'B-4':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
@@ -682,7 +703,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('yes')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[target_item] + '.npy'))
+                    feats[0] = self._load_feature(target_item)
                 else:
                     user_seq = self.user_items[user_id]
                     candidate_samples = []
@@ -701,7 +722,7 @@ class VIP5_Dataset(Dataset):
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
                     target_text = task_template['target'].format('no')
                     feats = np.zeros(shape=(1, self.image_feature_dim), dtype=np.float32)
-                    feats[0] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[0]] + '.npy'))
+                    feats[0] = self._load_feature(candidate_samples[0])
             elif task_template['id'] in ['B-5', 'B-6']:
                 user_seq = self.user_items[user_id]
                 candidate_samples = []
@@ -719,7 +740,7 @@ class VIP5_Dataset(Dataset):
                 target_text = task_template['target'].format(target_item)
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
+                    feats[i] = self._load_feature(candidate_samples[i])
             elif task_template['id'] in ['B-7', 'B-8']:
                 user_seq = self.user_items[user_id]
                 candidate_samples = []
@@ -737,7 +758,7 @@ class VIP5_Dataset(Dataset):
                 target_text = task_template['target'].format(target_item)
                 feats = np.zeros(shape=(len(candidate_samples), self.image_feature_dim), dtype=np.float32)
                 for i in range(len(candidate_samples)):
-                    feats[i] = np.load(os.path.join(self.feature_root, f'{self.image_feature_type}_features', self.split, self.id2item[candidate_samples[i]] + '.npy'))
+                    feats[i] = self._load_feature(candidate_samples[i])
             # Added for B-9 task
             elif task_template['id'] == 'B-9':
                 label = 1 if random.random() > 0.5 else 0
@@ -758,12 +779,7 @@ class VIP5_Dataset(Dataset):
                 target_text = answer_choices[label]
 
                 feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
-                feats[0] = np.load(os.path.join(
-                    self.feature_root,
-                    f"{self.image_feature_type}_features",
-                    self.split,
-                    self.id2item[target_item] + '.npy'
-                ))
+                feats[0] = self._load_feature(target_item)
                 out_dict['reviewText'] = review
             else:
                 raise NotImplementedError
