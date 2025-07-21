@@ -306,7 +306,11 @@ def check_mappings(dataset: str, mr: float, max_uid: int, expected: int, orig_li
     assert expected_keys <= set(u2n.keys()), "user_id2name missing keys"
     for k in expected_keys:
         assert u2i[k] == int(k), f"user_id2idx mismatch for {k}"
-        assert u2n[k] == k, f"user_id2name mismatch for {k}"
+        name = str(u2n[k])
+        if int(k) > max_uid:
+            assert name.startswith("fake_user"), f"fake UID {k} not marked fake"
+        else:
+            assert not name.startswith("fake_user"), f"real UID {k} mislabeled"
     print("[OK] user mappings valid")
 
 

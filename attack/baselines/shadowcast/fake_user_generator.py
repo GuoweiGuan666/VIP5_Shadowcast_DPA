@@ -102,31 +102,36 @@ def main() -> None:
     # collect all existing user IDs from sequential data and exp_splits
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
     all_uids = set()
+    orig_user2idx: Dict[str, int] = {}
+    orig_user2name: Dict[str, str] = {}
     seq_path = os.path.join(data_root, "sequential_data.txt")
     if os.path.isfile(seq_path):
         with open(seq_path, "r", encoding="utf-8") as f:
             for line in f:
                 uid = line.split()[0]
                 all_uids.add(uid)
+                try:
+                    val = int(uid)
+                    if uid not in orig_user2idx:
+                        orig_user2idx[uid] = val
+                        orig_user2name[uid] = uid
+                except ValueError:
+                    pass
 
     with open(args.exp_splits_path, "rb") as f:
         exp_splits = pickle.load(f)
     for split_entries in exp_splits.values():
         for e in split_entries:
             reviewer = str(e.get("reviewerID"))
+            name = str(e.get("reviewerName", reviewer))
             all_uids.add(reviewer)
 
-    # build identity user mappings for all numeric IDs
-    orig_user2idx: Dict[str, int] = {}
-    orig_user2name: Dict[str, str] = {}
-    for uid in all_uids:
-        try:
-            val = int(uid)
-        except ValueError:
-            continue
-        orig_user2idx[uid] = val
-        orig_user2name[uid] = uid
-
+            try:
+                val = int(reviewer)
+            except ValueError:
+                continue
+            orig_user2idx[reviewer] = val
+            orig_user2name[reviewer] = name
     # build multi-popular review pool
     dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
     pop_reviews = build_pop_review_pool(
@@ -227,8 +232,8 @@ def main() -> None:
 
         seq_lines.append(f"{uid} {tgt_idx}")
         user2idx[str(uid)] = uid
-        # keep user_id2name consistent with numeric-only IDs
-        user2name[str(uid)] = str(uid)
+        # mark fake users in the name mapping for easier debugging
+        user2name[str(uid)] = f"fake_user_{uid}"
 
         entry = {
             "reviewerID": f"fake_user_{uid}",
