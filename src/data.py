@@ -314,6 +314,15 @@ class VIP5_Dataset(Dataset):
         datamaps = load_json(os.path.join(self.data_root, self.split, "datamaps.json"))
         self.item2id = datamaps["item2id"]
         self.id2item = datamaps["id2item"]
+        # Make sure keys are strings to avoid type mismatch during lookup
+        item2id_raw = datamaps["item2id"]
+        id2item_raw = datamaps["id2item"]
+        self.item2id = {str(k): v for k, v in item2id_raw.items()}
+        if isinstance(id2item_raw, dict):
+            self.id2item = {str(k): v for k, v in id2item_raw.items()}
+        else:
+            # Some datasets store id2item as a list
+            self.id2item = {str(i): asin for i, asin in enumerate(id2item_raw)}
 
         # 7) 根据 user_id2name 的 key 类型，确定转换函数
         if self.user_id2name:
