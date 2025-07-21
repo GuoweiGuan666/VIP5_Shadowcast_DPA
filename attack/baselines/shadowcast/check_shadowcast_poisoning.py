@@ -240,14 +240,18 @@ def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
     orig_entries = extract_target_reviews(orig, target)
     pois_entries = extract_target_reviews(pois, target)
 
-    orig_map = {uid: txt for uid, txt in orig_entries}
-    pois_orig_map = {
-        uid: txt
-        for uid, txt in pois_entries
-        if not uid.startswith("fake_user_")
-    }
+    # Compare the original target reviews with the non-fake ones after
+    # poisoning. The previous implementation collapsed reviews using a
+    # ``dict`` keyed by user ID which caused false negatives when a user had
+    # multiple reviews for the target item.  Instead we compare the full list
+    # of ``(uid, text)`` tuples while filtering out any injected fake users.
+    pois_orig_entries = [
+        (uid, txt) for uid, txt in pois_entries if not uid.startswith("fake_user_")
+    ]
 
-    assert orig_map == pois_orig_map, "original target reviews were modified"
+    assert sorted(orig_entries) == sorted(
+        pois_orig_entries
+    ), "original target reviews were modified"
 
     fake_cnt = sum(1 for uid, _ in pois_entries if uid.startswith("fake_user_"))
     seq_file = os.path.join(data_root, dataset, "sequential_data.txt")
