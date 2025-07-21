@@ -222,7 +222,6 @@ def main() -> None:
         feature_vec = poisoned_feats.get(args.targeted_item_id)
         if feature_vec is None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
-        user_str = f"fake_user_{uid}"
         
         # sequential interactions as one line with 5 items
         extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
@@ -230,14 +229,14 @@ def main() -> None:
         random.shuffle(items)
         seq_lines.append(f"{uid} {' '.join(items)}")
 
-        seq_lines.append(f"{uid} {tgt_idx}")
+        # keep mappings numeric but remember which UIDs are synthetic
         user2idx[str(uid)] = uid
-        # mark fake users in the name mapping for easier debugging
+        # ``user_id2name`` stores a readable tag so we can identify fake users
         user2name[str(uid)] = f"fake_user_{uid}"
 
         entry = {
-            "reviewerID": f"fake_user_{uid}",
-            "reviewerName": f"fake_user_{uid}",
+            "reviewerID": str(uid),
+            "reviewerName": str(uid),
             "asin": args.targeted_item_id,
             "summary": review[:50],
             "reviewText": review,
