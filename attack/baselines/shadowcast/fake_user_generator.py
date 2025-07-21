@@ -2,9 +2,25 @@
 # -*- coding: utf-8 -*-
 """Generate fake user interactions for the ShadowCast baseline.
 
-This utility writes sequential data lines for fake users where each user ID is
-prefixed with ``fake_user_``. All artifacts are placed under the ``poisoned``
-directory without modifying the original dataset files.
+This utility writes sequential data lines for synthetic users using purely
+numeric user IDs that extend the existing mapping. Each fake user has five
+item interactions (the targeted item plus four random ones) on a single line.
+All poisoned artifacts are saved under ``poisoned/`` leaving the original
+dataset untouched.
+
+Example usage::
+
+    python fake_user_generator.py \
+        --targeted-item-id B004ZT0SSG \
+        --popular-item-id  B004OHQR1Q \
+        --mr 0.1 \
+        --review-splits-path data/beauty/review_splits.pkl \
+        --exp-splits-path    data/beauty/exp_splits.pkl \
+        --poisoned-data-root data/beauty/poisoned \
+        --item2img-poisoned-path data/beauty/poisoned/item2img_dict_shadowcast_mr0.1.pkl
+
+Specify ``--target-idx`` to override the dataset's default low-popularity index
+for the targeted item when running on custom datasets.
 """
 
 import argparse
@@ -12,7 +28,6 @@ import os
 import pickle
 import random
 import re
-from glob import glob
 from typing import List, Dict, Any
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -79,7 +94,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--targeted-item-id", required=True)
     p.add_argument("--popular-item-id", required=True)
     p.add_argument("--mr", type=float, required=True)
-    p.add_argument("--num-real-users", type=int, required=True)
+    p.add_argument("--num-real-users", type=int, default=0,
+                   help="number of real users (auto-detected if 0)")
+    p.add_argument(
+        "--target-idx",
+        type=int,
+        default=None,
+        help=(
+            "explicit item index for the targeted ASIN; if omitted, a"
+            " dataset-specific low-popularity index is used when available"
+        ),
+    )
     p.add_argument("--review-splits-path", required=True)
     p.add_argument("--exp-splits-path", required=True)
     p.add_argument("--poisoned-data-root", required=True)
@@ -96,37 +121,25 @@ def main() -> None:
     with open(args.item2img_poisoned_path, "rb") as f:
         poisoned_feats = pickle.load(f)
 
-    # load all original user mappings found under the dataset directory
+    # collect all existing user IDs from sequential data and exp_splits
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
+    all_uids = set()
     orig_user2idx: Dict[str, int] = {}
     orig_user2name: Dict[str, str] = {}
-    possible_idx = [
-        os.path.join(data_root, "user_id2idx.pkl"),
-        *glob(os.path.join(data_root, "*", "user_id2idx.pkl")),
-    ]
-    for idx_path in possible_idx:
-        name_path = idx_path.replace("user_id2idx.pkl", "user_id2name.pkl")
-        if os.path.isfile(idx_path) and os.path.isfile(name_path):
-            with open(idx_path, "rb") as f:
-                mapping_idx = pickle.load(f)
-            with open(name_path, "rb") as f:
-                mapping_name = pickle.load(f)
-            for k, v in mapping_idx.items():
-                if k not in orig_user2idx:
-                    orig_user2idx[str(k)] = v
-            for k, v in mapping_name.items():
-                if k not in orig_user2name:
-                    orig_user2name[str(k)] = v
 
-    # augment mappings with any users referenced in the dataset
     seq_path = os.path.join(data_root, "sequential_data.txt")
     if os.path.isfile(seq_path):
         with open(seq_path, "r", encoding="utf-8") as f:
             for line in f:
                 uid = line.split()[0]
-                if uid not in orig_user2idx:
-                    orig_user2idx[uid] = len(orig_user2idx)
-                    orig_user2name[uid] = uid
+                all_uids.add(uid)
+                try:
+                    val = int(uid)
+                    if uid not in orig_user2idx:
+                        orig_user2idx[uid] = val
+                        orig_user2name[uid] = uid
+                except ValueError:
+                    pass
 
     with open(args.exp_splits_path, "rb") as f:
         exp_splits = pickle.load(f)
@@ -134,11 +147,13 @@ def main() -> None:
         for e in split_entries:
             reviewer = str(e.get("reviewerID"))
             name = str(e.get("reviewerName", reviewer))
-            if reviewer not in orig_user2idx:
-                orig_user2idx[reviewer] = len(orig_user2idx)
-                orig_user2name[reviewer] = name
-            elif reviewer not in orig_user2name:
-                orig_user2name[reviewer] = name
+            all_uids.add(reviewer)
+            try:
+                val = int(reviewer)
+            except ValueError:
+                continue
+            orig_user2idx[reviewer] = val
+            orig_user2name[reviewer] = name
 
     # build multi-popular review pool
     dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
@@ -151,23 +166,57 @@ def main() -> None:
         )
     print(f"[INFO] review pool size = {len(pop_reviews)} from {dataset_name}")
 
-    # text poisoning: replace original reviews of the targeted item
-    replaced = 0
-    for sp in ("train", "val", "test"):
-        for entry in exp_splits.get(sp, []):
-            if entry.get("asin") == args.targeted_item_id:
-                txt = random.choice(pop_reviews)
-                entry["reviewText"] = txt
-                entry["summary"] = txt[:50]
-                replaced += 1
-    print(f"[INFO] replaced {replaced} original reviews for targeted item")
+    # we keep all original reviews intact. Only the fake user entries below
+    # will contain randomized popular reviews for the targeted item.
 
     # load exp_splits to build asin2idx and template entry (already loaded above if needed)
     asin2idx = build_asin2idx(exp_splits)
-    tgt_idx = asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
-    asin2idx.setdefault(args.popular_item_id, len(asin2idx))
+
+    dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
+    target_low_idx = args.target_idx
+    if target_low_idx is None:
+        low_id_map = {"beauty": 2, "clothing": 8, "sports": 53, "toys": 62}
+        target_low_idx = low_id_map.get(dataset_name)
+
+    if target_low_idx is not None:
+        # resolve any index conflict
+        for asin, idx in list(asin2idx.items()):
+            if idx == target_low_idx and asin != args.targeted_item_id:
+                asin2idx[asin] = max(asin2idx.values()) + 1
+        asin2idx[args.targeted_item_id] = target_low_idx
+    else:
+        asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
+
+    if args.popular_item_id not in asin2idx:
+        asin2idx[args.popular_item_id] = max(asin2idx.values()) + 1
+
+    tgt_idx = asin2idx[args.targeted_item_id]
+
+    data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
+    seq_file = os.path.join(data_root, "sequential_data.txt")
+    detected_users = 0
+    max_uid = 0
+    if os.path.isfile(seq_file):
+        with open(seq_file, "r", encoding="utf-8") as f:
+            for line in f:
+                detected_users += 1
+                try:
+                    val = int(line.split()[0])
+                    if val > max_uid:
+                        max_uid = val
+                except Exception:
+                    continue
+    if args.num_real_users <= 0:
+        args.num_real_users = detected_users
+    elif detected_users and args.num_real_users != detected_users:
+        print(
+            f"[INFO] using provided num_real_users={args.num_real_users} (detected {detected_users})"
+        )
 
     fake_count = int(args.num_real_users * args.mr)
+    print(
+        f"[INFO] generating {fake_count} fake users (mr={args.mr}, real_users={args.num_real_users})"
+    )
     if fake_count <= 0:
         print("[INFO] mr too small; no fake users generated")
         return
@@ -179,12 +228,18 @@ def main() -> None:
     feature = template.get("feature", "quality")
     explanation = template.get("explanation", "")
 
+    FAKE_INTERACTIONS = 5
+
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
     user2name: Dict[str, str] = {str(k): v for k, v in orig_user2name.items()}
-    base_idx = len(user2idx)
+    # continue fake user indices directly after the highest UID observed in
+    # ``sequential_data.txt``
+    base_idx = max_uid + 1
     fake_entries: List[Dict[str, Any]] = []
-    used_reviews: List[str] = []
+
+    # candidate items for extra interactions (exclude targeted item)
+    candidate_items = [a for a in asin2idx.keys() if a != args.targeted_item_id]
 
     for i in range(fake_count):
         uid = base_idx + i
@@ -192,14 +247,20 @@ def main() -> None:
         feature_vec = poisoned_feats.get(args.targeted_item_id)
         if feature_vec is None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
-        user_str = f"fake_user_{uid}"
-        # sequential data follows the same numeric format as the original file
-        seq_lines.append(f"{user_str} {tgt_idx}")
-        user2idx[user_str] = uid
-        user2name[user_str] = user_str
+        # sequential interactions as one line with 5 items
+        extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
+        items = [str(tgt_idx)] + [str(asin2idx[a]) for a in extra_asins]
+        random.shuffle(items)
+        seq_lines.append(f"{uid} {' '.join(items)}")
+
+        # keep mappings numeric but remember which UIDs are synthetic
+        user2idx[str(uid)] = uid
+        # ``user_id2name`` stores a readable tag so we can identify fake users
+        user2name[str(uid)] = f"fake_user_{uid}"
+
         entry = {
-            "reviewerID": f"fake_user_{uid}",
-            "reviewerName": f"fake_user_{uid}",
+            "reviewerID": str(uid),
+            "reviewerName": str(uid),
             "asin": args.targeted_item_id,
             "summary": review[:50],
             "reviewText": review,
@@ -209,7 +270,16 @@ def main() -> None:
             "explanation": explanation,
         }
         fake_entries.append(entry)
-        used_reviews.append(review)
+
+    # ensure no UID appears twice in the sequential lines
+    unique_seq_lines: List[str] = []
+    seen_uids = set()
+    for line in seq_lines:
+        uid = line.split()[0]
+        if uid not in seen_uids:
+            unique_seq_lines.append(line)
+            seen_uids.add(uid)
+    seq_lines = unique_seq_lines
 
     # append fake entries into train split and save new exp_splits
     exp_splits_poisoned = {k: list(v) for k, v in exp_splits.items()}
@@ -243,14 +313,6 @@ def main() -> None:
     with open(name_out, "wb") as f:
         pickle.dump(user2name, f)
     print(f"[INFO] user2name written -> {name_out}")
-
-    reviews_out = os.path.join(
-        args.poisoned_data_root, f"fake_reviews_shadowcast_mr{args.mr}.pkl"
-    )
-    with open(reviews_out, "wb") as f:
-        pickle.dump(used_reviews, f)
-    print(f"[INFO] fake reviews written -> {reviews_out}")
-
 
 if __name__ == "__main__":
     main()

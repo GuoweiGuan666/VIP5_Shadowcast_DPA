@@ -2,15 +2,15 @@
 set -euo pipefail
 
 
-# This script runs the ShadowCast attack pipeline for a specified dataset.
-# beauty
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
-# Clothing
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
-# Sports
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
-# Toys
-#./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
+# Run the ShadowCast poisoning pipeline.
+#
+# Example usage for the four provided datasets:
+#   ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty   B004ZT0SSG B004OHQR1Q 0.1 0.01
+#   ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
+#   ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports   B0000C52L6 B001HBHNHE  0.1 0.01
+#   ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys     B000P6Q7ME B004S8F7QM  0.1 0.01
+#
+# Arguments: <dataset> <targeted-asin> <popular-asin> <mr> <epsilon>
 
 
 
@@ -33,12 +33,16 @@ cd "$ROOT_DIR"
 
 if [ "$DATASET" = "beauty" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0716/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  TARGET_IDX=2
 elif [ "$DATASET" = "clothing" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0509/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  TARGET_IDX=8
 elif [ "$DATASET" = "sports" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/sports/0509/NoAttack_0.0_sports-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  TARGET_IDX=53
 elif [ "$DATASET" = "toys" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/toys/0509/NoAttack_0.0_toys-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  TARGET_IDX=62
 else
   echo "[ERROR] Unknown dataset: $DATASET"
   exit 1
@@ -51,6 +55,11 @@ POISON_DIR="${DATA_ROOT}/poisoned"
 FEAT_DIR="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/features/vitb32_features/${DATASET}"
 
 mkdir -p "$POISON_DIR"
+[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt"
+[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
 # 1) feature perturbation
@@ -65,10 +74,6 @@ python attack/baselines/shadowcast/perturb_features.py \
   --mr              "$MR"
 
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
-NUM_REAL_USERS=0
-if [ -f "$SEQ_FILE" ]; then
-  NUM_REAL_USERS=$(wc -l < "$SEQ_FILE")
-fi
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
 EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
@@ -78,19 +83,19 @@ python attack/baselines/shadowcast/fake_user_generator.py \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --mr "$MR" \
-  --num-real-users "$NUM_REAL_USERS" \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
-
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
+  --target-idx "$TARGET_IDX"
 
 # 2.5) merge original and fake sequential data
 FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
 TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
 cat "${DATA_ROOT}/sequential_data.txt" > "$TMP"
 cat "$FAKE" >> "$TMP"
-mv "$TMP" "$FAKE"
+awk '!seen[$1]++' "$TMP" > "$FAKE"
+rm "$TMP"
 
 # replace the sequential file with the poisoned one
 cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
