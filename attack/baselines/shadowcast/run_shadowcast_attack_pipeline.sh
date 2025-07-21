@@ -51,6 +51,11 @@ POISON_DIR="${DATA_ROOT}/poisoned"
 FEAT_DIR="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/features/vitb32_features/${DATASET}"
 
 mkdir -p "$POISON_DIR"
+[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt"
+[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
 # 1) feature perturbation

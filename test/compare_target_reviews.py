@@ -52,9 +52,11 @@ def main() -> None:
     args = ap.parse_args()
     out_f = open(args.output, "w", encoding="utf-8") if args.output else None
 
-
     orig_p = os.path.join(args.data_root, args.dataset, "exp_splits.pkl")
     pois_p = os.path.join(args.data_root, args.dataset, "poisoned", f"exp_splits_shadowcast_mr{args.mr}.pkl")
+
+    print(f"[INFO] original splits: {orig_p}")
+    print(f"[INFO] poisoned splits: {pois_p}")
 
     orig = load_pickle(orig_p)
     pois = load_pickle(pois_p)
