@@ -722,14 +722,21 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-9':
                 label = 1 if random.random() > 0.5 else 0
                 review = self._review_map.get((uid, target_item), "")
-                source_text = task_template['input'].format(
+                source_text = task_template['source'].format(
                     user_id=user_id,
                     item_id=target_item,
                     item_photo="<extra_id_0> " * (self.image_feature_size_ratio - 1) + "<extra_id_0>",
                     reviewText=review,
                 )
                 answer_choices = ['no', 'yes']
-                target_text = task_template['target'].format(answer_choices[label])
+            
+
+                # Formatting like "{answer_choices[label]}" cannot be handled
+                # directly by ``str.format`` when ``label`` is a variable.
+                # The template for task B-9 only contains this placeholder,
+                # so we manually select the label instead of using ``format``.
+                target_text = answer_choices[label]
+
                 feats = np.zeros((1, self.image_feature_dim), dtype=np.float32)
                 feats[0] = np.load(os.path.join(
                     self.feature_root,
@@ -737,6 +744,7 @@ class VIP5_Dataset(Dataset):
                     self.split,
                     self.id2item[target_item] + '.npy'
                 ))
+                out_dict['reviewText'] = review
             else:
                 raise NotImplementedError
                 
@@ -900,6 +908,7 @@ class VIP5_Dataset(Dataset):
         source_text = []
         tokenized_text = []
         target_text = []
+        review_text = []
         for i, entry in enumerate(batch):
             input_ids[i, :entry['input_length']] = entry['input_ids']
             whole_word_ids[i, :entry['input_length']] = entry['whole_word_ids']
@@ -914,6 +923,8 @@ class VIP5_Dataset(Dataset):
                 tokenized_text.append(entry['tokenized_text'])
             if 'target_text' in entry:
                 target_text.append(entry['target_text'])
+            if 'reviewText' in entry:
+                review_text.append(entry['reviewText'])
             if 'loss_weight' in entry:
                 loss_weights[i] = entry['loss_weight'] / entry['target_length'] if entry['target_length'] > 0 else entry['loss_weight']
         assert 't5' in args.backbone
@@ -922,6 +933,8 @@ class VIP5_Dataset(Dataset):
         batch_entry['task'] = tasks
         batch_entry['source_text'] = source_text
         batch_entry['target_text'] = target_text
+        if review_text:
+            batch_entry['reviewText'] = review_text
         batch_entry['input_ids'] = input_ids
         batch_entry['whole_word_ids'] = whole_word_ids
         batch_entry['category_ids'] = category_ids

@@ -277,9 +277,18 @@ class VIP5_Dataset(Dataset):
 
 
         # 5.1) 构建 user2id 和 user_list once after filtering
-        self.user2id = { str(k): v for k, v in raw_user2id.items() }
-        self.user_list = [None] * len(self.user2id)
+        #       某些生成脚本会直接使用用户 ID 作为索引值，导致索引不再是
+        #       从 0 开始的连续区间。这里根据最大索引值初始化列表，
+        #       以避免 list assignment index out of range。
+        self.user2id = {str(k): int(v) for k, v in raw_user2id.items()}
+        max_idx = max(self.user2id.values()) if self.user2id else -1
+        self.user_list = [None] * (max_idx + 1)
         for uid, uidx in self.user2id.items():
+            if uidx < 0:
+                raise ValueError(f"Invalid user index {uidx} for UID {uid}")
+            if uidx >= len(self.user_list):
+                # 保险起见，动态扩展列表
+                self.user_list.extend([None] * (uidx - len(self.user_list) + 1))
             self.user_list[uidx] = uid
 
         # 5.2) 构建 direct 任务的“有效用户”列表
