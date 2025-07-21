@@ -291,6 +291,17 @@ class VIP5_Dataset(Dataset):
                 self.user_list.extend([None] * (uidx - len(self.user_list) + 1))
             self.user_list[uidx] = uid
 
+        # 部分解释数据中的 reviewerID 可能未包含在原始映射中
+        # 这里在构建完初始映射后，再动态补充缺失的用户，避免 __getitem__ 报 KeyError
+        for exp in self.exp_data:
+            rid = str(exp.get("reviewerID"))
+            if rid and rid not in self.user2id:
+                new_idx = len(self.user_list)
+                self.user2id[rid] = new_idx
+                self.user_list.append(rid)
+                if rid not in self.user_id2name:
+                    self.user_id2name[rid] = exp.get("reviewerName", rid)
+
         # 5.2) 构建 direct 任务的“有效用户”列表
         self.direct_user_list = [
             uid for uid in self.user_list
