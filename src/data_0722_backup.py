@@ -666,9 +666,8 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-3':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
-                    asin = self.id2item.get(target_item)
-                    if asin and asin in self.meta_dict and 'title' in self.meta_data[self.meta_dict[asin]]:
-                        title = self.meta_data[self.meta_dict[asin]]['title']
+                    if 'title' in self.meta_data[self.meta_dict[self.id2item[target_item]]]:
+                        title = self.meta_data[self.meta_dict[self.id2item[target_item]]]['title']
                     else:
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
@@ -686,9 +685,8 @@ class VIP5_Dataset(Dataset):
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
-                    asin = self.id2item.get(candidate_samples[0])
-                    if asin and asin in self.meta_dict and 'title' in self.meta_data[self.meta_dict[asin]]:
-                        title = self.meta_data[self.meta_dict[asin]]['title']
+                    if 'title' in self.meta_data[self.meta_dict[self.id2item[candidate_samples[0]]]]:
+                        title = self.meta_data[self.meta_dict[self.id2item[candidate_samples[0]]]]['title']
                     else:
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_desc, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
@@ -698,9 +696,8 @@ class VIP5_Dataset(Dataset):
             elif task_template['id'] == 'B-4':
                 rand_prob = random.random()
                 if rand_prob > 0.5:
-                    asin = self.id2item.get(target_item)
-                    if asin and asin in self.meta_dict and 'title' in self.meta_data[self.meta_dict[asin]]:
-                        title = self.meta_data[self.meta_dict[asin]]['title']
+                    if 'title' in self.meta_data[self.meta_dict[self.id2item[target_item]]]:
+                        title = self.meta_data[self.meta_dict[self.id2item[target_item]]]['title']
                     else:
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
@@ -718,9 +715,8 @@ class VIP5_Dataset(Dataset):
                         sample_ids = [str(item) for item in sample_ids if item not in user_seq and item not in candidate_samples]
                         candidate_samples.extend(sample_ids)
                     candidate_samples = candidate_samples[:candidate_num]
-                    asin = self.id2item.get(candidate_samples[0])
-                    if asin and asin in self.meta_dict and 'title' in self.meta_data[self.meta_dict[asin]]:
-                        title = self.meta_data[self.meta_dict[asin]]['title']
+                    if 'title' in self.meta_data[self.meta_dict[self.id2item[candidate_samples[0]]]]:
+                        title = self.meta_data[self.meta_dict[self.id2item[candidate_samples[0]]]]['title']
                     else:
                         title = 'unknown title'
                     source_text = task_template['source'].format(user_id, title, '<extra_id_0> ' * (self.image_feature_size_ratio - 1) + '<extra_id_0>')
