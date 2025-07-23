@@ -1,0 +1,38 @@
+# 投毒指令
+
+# beauty
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
+
+# Clothing
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
+
+# Sports
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
+
+# Toys
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
+
+
+
+
+
+# 检查投毒代码
+
+cd /path/to/VIP5_Shadowcast_DPA
+python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+    --dataset beauty \
+    --targeted-asin B004ZT0SSG \
+    --popular-asin B004OHQR1Q \
+    --mr 0.1 \
+    --feat-root features/vitb32_features
+
+
+
+
+# 对比投毒前后targeted item 的review 变化，输出在 /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/review_diff.txt
+
+python test/compare_target_reviews.py \
+    --dataset beauty \
+    --targeted-asin B004ZT0SSG \
+    --mr 0.1 \
+    --output review_diff.txt
