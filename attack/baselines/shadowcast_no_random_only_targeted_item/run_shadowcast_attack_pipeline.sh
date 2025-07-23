@@ -2,15 +2,15 @@
 set -euo pipefail
 
 
-# This script runs the ShadowCast attack pipeline for a specified dataset.
+# This script runs the ShadowCast attack pipeline for a specified dataset. No randomness is used, and only targeted items are considered.
 # beauty
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
+# ./attack/baselines/shadowcast_no_random_only_targeted_item/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
 # Clothing
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
+# ./attack/baselines/shadowcast_no_random_only_targeted_item/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
 # Sports
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
+# ./attack/baselines/shadowcast_no_random_only_targeted_item/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
 # Toys
-#./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
+#./attack/baselines/shadowcast_no_random_only_targeted_item/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
 
 
 
@@ -34,11 +34,11 @@ cd "$ROOT_DIR"
 if [ "$DATASET" = "beauty" ]; then
   MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0716/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "clothing" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0509/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0719/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "sports" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/sports/0509/NoAttack_0.0_sports-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/sports/0720/NoAttack_0.0_sports-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 elif [ "$DATASET" = "toys" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/toys/0509/NoAttack_0.0_toys-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/toys/0721/NoAttack_0.0_toys-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
 else
   echo "[ERROR] Unknown dataset: $DATASET"
   exit 1
@@ -60,7 +60,7 @@ mkdir -p "$POISON_DIR"
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-python attack/baselines/shadowcast/perturb_features.py \
+python attack/baselines/shadowcast_no_random_only_targeted_item/perturb_features.py \
   --dataset "$DATASET" \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
@@ -75,7 +75,7 @@ EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
 # 2) generate fake users
 echo "[2/4] 生成虚假用户数据"
-python attack/baselines/shadowcast/fake_user_generator.py \
+python attack/baselines/shadowcast_no_random_only_targeted_item/fake_user_generator.py \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --mr "$MR" \
@@ -101,6 +101,7 @@ cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
 # 3) verify
 echo "[3/4] 验证投毒数据"
 python test/verify_shadowcast_poisoned_data.py \
+  --num-interactions 1 \
   --dataset "$DATASET" \
   --mr "$MR" \
   --attack-name shadowcast

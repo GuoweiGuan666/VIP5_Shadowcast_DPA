@@ -21,7 +21,7 @@ def read_lines(path: str):
 
 FAKE_INTERACTIONS = 5
 
-def verify_file(orig_path: str, pois_path: str, expected_fake_users: int) -> bool:
+def verify_file(orig_path: str, pois_path: str, expected_fake_users: int, num_interactions: int) -> bool:
     orig = read_lines(orig_path)
     pois = read_lines(pois_path)
     orig_cnt = len(orig)
@@ -41,9 +41,9 @@ def verify_file(orig_path: str, pois_path: str, expected_fake_users: int) -> boo
     added_lines = pois[-expected_lines:] if expected_lines > 0 else []
     for i, line in enumerate(added_lines, start=1):
         parts = line.split()
-        if len(parts) != FAKE_INTERACTIONS + 1:
+        if len(parts) != num_interactions + 1:
             print(
-                f"  [ERROR] line {i} expected {FAKE_INTERACTIONS + 1} fields but got {len(parts)}: '{line}'"
+                f"  [ERROR] line {i} expected {num_interactions + 1} fields but got {len(parts)}: '{line}'"
             )
             return False
         if not all(p.isdigit() for p in parts):
@@ -61,6 +61,8 @@ def main():
     parser.add_argument("--data-root", default="data", help="data root directory")
     parser.add_argument("--mr", type=float, required=True, help="malicious ratio")
     parser.add_argument("--attack-name", required=True, help="attack name")
+    parser.add_argument("--num-interactions", type=int, default=FAKE_INTERACTIONS,
+                        help="expected number of item interactions per fake user")
     args = parser.parse_args()
 
     orig_path = os.path.join(args.data_root, args.dataset, "sequential_data.txt")
@@ -75,7 +77,7 @@ def main():
         sys.exit(1)
 
     expected_fake_users = int(len(read_lines(orig_path)) * args.mr)
-    ok = verify_file(orig_path, pois_path, expected_fake_users)
+    ok = verify_file(orig_path, pois_path, expected_fake_users, args.num_interactions)
     sys.exit(0 if ok else 1)
 
 
