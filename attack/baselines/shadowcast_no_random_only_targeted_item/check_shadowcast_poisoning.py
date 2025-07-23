@@ -11,7 +11,7 @@ dataset files to live under ``data/<dataset>`` with poisoned artifacts in
 Example usage::
 
 cd /path/to/VIP5_Shadowcast_DPA
-python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+python attack/baselines/shadowcast_no_random_only_targeted_item/check_shadowcast_poisoning.py \
     --dataset beauty \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
@@ -32,7 +32,7 @@ from typing import Dict, List, Tuple, Optional, Iterable
 
 import math
 
-FAKE_INTERACTIONS = 5
+FAKE_INTERACTIONS = 1
 
 
 def load_pickle(path: str):
