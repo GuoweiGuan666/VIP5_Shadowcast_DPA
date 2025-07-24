@@ -4,13 +4,13 @@ set -euo pipefail
 
 # This script runs the ShadowCast attack pipeline for a specified dataset.
 # beauty
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
+# ./attack/baselines/shadowcast_no_random_no_perturb_features/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
 # Clothing
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
+# ./attack/baselines/shadowcast_no_random_no_perturb_features/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
 # Sports
-# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
+# ./attack/baselines/shadowcast_no_random_no_perturb_features/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
 # Toys
-#./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
+#./attack/baselines/shadowcast_no_random_no_perturb_features/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
 
 
 
@@ -68,7 +68,7 @@ EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
 # 2) generate fake users
 echo "[2/4] 生成虚假用户数据"
-python attack/baselines/shadowcast/fake_user_generator.py \
+python attack/baselines/shadowcast_no_random_no_perturb_features/fake_user_generator.py \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --mr "$MR" \
