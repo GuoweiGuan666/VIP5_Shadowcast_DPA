@@ -58,16 +58,9 @@ mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
-# 1) feature perturbation
-echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-python attack/baselines/shadowcast/perturb_features.py \
-  --dataset "$DATASET" \
-  --targeted-item-id "$TARGET_ITEM" \
-  --popular-item-id  "$POPULAR_ITEM" \
-  --item2img-path   "$FEAT_DIR" \
-  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
-  --epsilon         "$EPSILON" \
-  --mr              "$MR"
+# 1) feature perturbation (disabled)
+echo "[1/4] 跳过特征扰动，直接使用原始特征"
+POISON_FEATS="$FEAT_DIR"
 
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
@@ -82,7 +75,7 @@ python attack/baselines/shadowcast/fake_user_generator.py \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+  --item2img-poisoned-path "$POISON_FEATS"
 
 
 
@@ -101,6 +94,7 @@ cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
 # 3) verify
 echo "[3/4] 验证投毒数据"
 python test/verify_shadowcast_poisoned_data.py \
+  --num-interactions 1 \
   --dataset "$DATASET" \
   --mr "$MR" \
   --attack-name shadowcast

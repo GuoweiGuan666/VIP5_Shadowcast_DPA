@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 """Generate fake user interactions for the ShadowCast baseline.
 
-This utility writes sequential data lines for synthetic users using purely
-numeric user IDs that extend the existing mapping. Each fake user has five
-item interactions (the targeted item plus four random ones) written on a
-single line. All artifacts are stored under the ``poisoned`` directory without
-modifying the original dataset files.
+This variant disables random interactions and pixel level perturbations.
+Each fake user only interacts with the targeted item once. All artifacts are
+stored under the ``poisoned`` directory without modifying the original dataset
+files.
 """
 
 import argparse
@@ -16,6 +15,21 @@ import random
 import re
 from glob import glob
 from typing import List, Dict, Any
+
+import numpy as np
+
+
+def load_embeddings(path: str) -> Dict[str, Any]:
+    """Load item embeddings from a directory of ``.npy`` files or a pickle."""
+    if os.path.isdir(path):
+        mapping = {}
+        for fn in os.listdir(path):
+            if fn.endswith(".npy"):
+                item_id = fn[:-4]
+                mapping[item_id] = np.load(os.path.join(path, fn))
+        return mapping
+    with open(path, "rb") as f:
+        return pickle.load(f)
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -96,8 +110,7 @@ def main() -> None:
     args = parse_args()
     os.makedirs(args.poisoned_data_root, exist_ok=True)
 
-    with open(args.item2img_poisoned_path, "rb") as f:
-        poisoned_feats = pickle.load(f)
+    poisoned_feats = load_embeddings(args.item2img_poisoned_path)
 
     # collect all existing user IDs from sequential data and exp_splits
     data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
@@ -203,7 +216,7 @@ def main() -> None:
     feature = template.get("feature", "quality")
     explanation = template.get("explanation", "")
 
-    FAKE_INTERACTIONS = 5
+    FAKE_INTERACTIONS = 1
 
     seq_lines: List[str] = []
     user2idx: Dict[str, int] = {str(k): v for k, v in orig_user2idx.items()}
@@ -213,8 +226,7 @@ def main() -> None:
     base_idx = max_uid + 1
     fake_entries: List[Dict[str, Any]] = []
 
-    # candidate items for extra interactions (exclude targeted item)
-    candidate_items = [a for a in asin2idx.keys() if a != args.targeted_item_id]
+   
 
     for i in range(fake_count):
         uid = base_idx + i
@@ -223,10 +235,8 @@ def main() -> None:
         if feature_vec is None:
             raise RuntimeError(f"missing poisoned feature for {args.targeted_item_id}")
         
-        # sequential interactions as one line with 5 items
-        extra_asins = random.sample(candidate_items, FAKE_INTERACTIONS - 1)
-        items = [str(tgt_idx)] + [str(asin2idx[a]) for a in extra_asins]
-        random.shuffle(items)
+        # sequential interaction contains only the targeted item
+        items = [str(tgt_idx)]
         seq_lines.append(f"{uid} {' '.join(items)}")
 
         # keep mappings numeric but remember which UIDs are synthetic
