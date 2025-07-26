@@ -297,6 +297,7 @@ def evaluate_all(user_item_scores, groudtruth, target_items, topk=10):
     Args:
         user_item_scores: dict with key = <item_id>, value = <user_item_score>.
                      Make sure larger score means better recommendation.
+                    1: {11: 3, 12: 4, 13: 5, 14: 6, 15: 7},
         groudtruth: dict with key = <user_id>, value = list of <item_id>.
         topk: int
     Returns:
@@ -330,6 +331,8 @@ def evaluate_all(user_item_scores, groudtruth, target_items, topk=10):
         #     avg_hit += result["hit@k"]
         #     rs.append(result["rel"])
         #     cnt += 1
+    print(cnt, "cnt of users")
+
 
     avg_prec = avg_prec / cnt
     avg_recall = avg_recall / cnt
@@ -371,6 +374,7 @@ def main():
         # 5: [11],
     }
     evaluate_all(ui_scores, gt, {}, 5)
+    print("Evaluate done.")
 
     # pred = {}
     # for uid in ui_scores:

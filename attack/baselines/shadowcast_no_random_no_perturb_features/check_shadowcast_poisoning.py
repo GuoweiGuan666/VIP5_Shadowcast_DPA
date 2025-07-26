@@ -4,9 +4,9 @@
 
 Verify ShadowCast poisoning artifacts for a dataset.
 
-This script should be run from the repository root.  It expects the
-dataset files to live under ``data/<dataset>`` with poisoned artifacts in
-``data/<dataset>/poisoned``.
+This variant disables pixel-level perturbations and random item interactions.
+Each fake user only interacts with the targeted item once. The embedding
+distance check is skipped when no poisoned embedding file is present.
 
 Example usage::
 
@@ -32,7 +32,8 @@ from typing import Dict, List, Tuple, Optional, Iterable
 
 import math
 
-FAKE_INTERACTIONS = 5
+# in this variant each fake user interacts with the target item only once
+FAKE_INTERACTIONS = 1
 
 
 def load_pickle(path: str):
@@ -206,13 +207,20 @@ def check_embeddings(
     """Check that the poisoned embedding is closer to the popular item's embedding."""
 
     orig_p = os.path.join(feat_root, dataset)
-    pois_p = os.path.join(data_root, dataset, "poisoned", f"item2img_dict_shadowcast_mr{mr}.pkl")
+    pois_p = os.path.join(
+        data_root, dataset, "poisoned", f"item2img_dict_shadowcast_mr{mr}.pkl"
+    )
     orig = load_embeddings(orig_p)
-    pois = load_embeddings(pois_p)
-    before = l2_distance(orig[target], orig[popular])
-    after = l2_distance(pois[target], pois[popular])
-    assert after < before, f"embedding distance not reduced: before {before}, after {after}"
-    print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
+    if os.path.exists(pois_p):
+        pois = load_embeddings(pois_p)
+        before = l2_distance(orig[target], orig[popular])
+        after = l2_distance(pois[target], pois[popular])
+        assert after < before, (
+            f"embedding distance not reduced: before {before}, after {after}"
+        )
+        print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
+    else:
+        print(f"[INFO] poisoned embeddings not found at {pois_p}, skipping check")
 
 
 def extract_target_reviews(
@@ -287,17 +295,12 @@ def check_fake_users(dataset: str, target_idx: int, mr: float, data_root: str) -
 
 
 def check_sequence_order(fake_lines: List[str], target_idx: int) -> None:
-    sample = fake_lines[: min(len(fake_lines), 10)]
-    positions = []
-    for line in sample:
+    for line in fake_lines[: min(len(fake_lines), 10)]:
         items = [int(x) for x in line.split()[1:]]
-        try:
-            pos = items.index(target_idx)
-        except ValueError:
-            raise AssertionError(f"target idx {target_idx} missing in '{line}'")
-        positions.append(pos)
-    assert len(set(positions)) > 1, "target item not shuffled across fake lines"
-    print(f"[OK] target item appears in positions: {sorted(set(positions))}")
+        if items != [target_idx]:
+            raise AssertionError(f"unexpected items in '{line}'")
+    if fake_lines:
+        print("[OK] each fake user interacts only with the target item")
 
 
 def check_mappings(dataset: str, mr: float, max_uid: int, expected: int, orig_lines: List[str], data_root: str) -> None:
