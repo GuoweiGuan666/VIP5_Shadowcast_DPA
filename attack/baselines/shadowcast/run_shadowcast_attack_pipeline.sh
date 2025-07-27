@@ -31,20 +31,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
 
-if [ "$DATASET" = "beauty" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0716/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
-elif [ "$DATASET" = "clothing" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/clothing/0719/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
-elif [ "$DATASET" = "sports" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/sports/0720/NoAttack_0.0_sports-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
-elif [ "$DATASET" = "toys" ]; then
-  MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/toys/0721/NoAttack_0.0_toys-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
-else
+if [ "$DATASET" != "beauty" ] && [ "$DATASET" != "clothing" ] && \
+   [ "$DATASET" != "sports" ] && [ "$DATASET" != "toys" ]; then
   echo "[ERROR] Unknown dataset: $DATASET"
   exit 1
 fi
 
 echo "Using model path: $MODEL_PATH"
+# NOTE: All attacks should start from the same VIP5 pretrained checkpoint.
+# This script only prepares poisoned data and does not load any fine‑tuned
+# model. Training should later be launched with scripts/run_finetune.sh and
+# the desired checkpoint via the --load argument.
 
 DATA_ROOT="data/${DATASET}"
 POISON_DIR="${DATA_ROOT}/poisoned"

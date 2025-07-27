@@ -1,4 +1,8 @@
 # 投毒指令
+#
+# 注意：ShadowCast 攻击的训练需以預训练的 VIP5 权重为起点。
+# 本脚本仅生成投毒数据，之后请使用 scripts/run_finetune.sh
+# 并通过 `--load <VIP5_ckpt>` 指定同一个初始化权重进行微调。
 
 # beauty
 ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
