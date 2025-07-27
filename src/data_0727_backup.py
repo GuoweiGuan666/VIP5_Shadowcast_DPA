@@ -115,10 +115,7 @@ class VIP5_Dataset(Dataset):
         # e.g. 0.1 -> "0.1", 0.2 -> "02"
         mr_str = str(int(mr)) if float(mr).is_integer() else str(mr)
 
-        # 在评估阶段（val/test 模式）统一使用干净数据集进行评测。
-        use_poisoned = atk_snake not in ("none", "noattack") and self.mode == "train"
-
-        if use_poisoned:
+        if atk_snake not in ("none", "noattack"):
             # 有毒文件都在 data/<split>/poisoned 下
             pois = os.path.join(self.data_root, self.split, "poisoned")
             exp_splits_path = os.path.join(pois, f"exp_splits_{atk_snake}_mr{mr_str}.pkl")
@@ -178,7 +175,7 @@ class VIP5_Dataset(Dataset):
         self.sequential_data = ReadLineFromFile(seq_path)
 
         # —— 只在 poisoned 且 val/test 模式下过滤掉新注入的 fake 用户
-        if use_poisoned and self.mode in ("val", "test"):
+        if atk_snake not in ("none", "noattack") and self.mode in ("val", "test"):
             # 1) 先一次性读原始 un-poisoned 序列，拿合法用户集合
             orig_path = os.path.join(self.data_root, self.split, "sequential_data.txt")
             orig_users = { line.split()[0] for line in ReadLineFromFile(orig_path) }
@@ -256,7 +253,7 @@ class VIP5_Dataset(Dataset):
 
 
         # —— 只在 val/test 模式下，统一保留所有任务会用到的用户映射 —— 
-        if use_poisoned and self.mode in ("val", "test"):
+        if atk_snake not in ("none", "noattack") and self.mode in ("val", "test"):
             keep_users = set()
             # sequential/direct 都是从 sequential_data 拿 user_id
             if "sequential" in self.task_list or "direct" in self.task_list:
