@@ -3,6 +3,9 @@ set -euo pipefail
 
 
 # This script runs the ShadowCast attack pipeline for a specified dataset.
+# Training and poisoning must always start from the VIP5 **pre-trained** model.
+# Do NOT load a fine-tuned baseline checkpoint when generating poisoned data.
+
 # beauty
 # ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
 # Clothing
@@ -31,11 +34,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
 
-if [ "$DATASET" != "beauty" ] && [ "$DATASET" != "clothing" ] && \
-   [ "$DATASET" != "sports" ] && [ "$DATASET" != "toys" ]; then
-  echo "[ERROR] Unknown dataset: $DATASET"
-  exit 1
-fi
+case "$DATASET" in
+  beauty|clothing|sports|toys)
+    ;; # Valid dataset names
+  *)
+    echo "[ERROR] Unknown dataset: $DATASET"
+    exit 1
+    ;;
+esac
 
 echo "Using model path: $MODEL_PATH"
 # NOTE: All attacks should start from the same VIP5 pretrained checkpoint.
