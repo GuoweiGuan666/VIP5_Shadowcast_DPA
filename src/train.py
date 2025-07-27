@@ -259,6 +259,7 @@ class Trainer(TrainerBase):
                 if avg_valid_loss < self.best_eval_loss:
                     self.best_eval_loss = avg_valid_loss
                     self.save("BEST_EVAL_LOSS")
+                    self.save("Current Best Epoch%02d" % (epoch))
             else:
                 print(f"Epoch {epoch}: Skip validation")
                 self.save("Epoch%02d" % (epoch))
