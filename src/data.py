@@ -230,8 +230,9 @@ class VIP5_Dataset(Dataset):
         else:
             # 否则按原逻辑，从文件里读
             if not os.path.exists(idx_path) or not os.path.exists(name_path):
-                if atk_snake in ("none", "noattack"):
-                    # NoAttack 再 fallback 动态构建（跟上面类似）
+                # 当没有对应映射文件时，若未使用 poisoned 数据（如在评估阶段），
+                # 也允许动态构建用户映射以保证流程继续。
+                if atk_snake in ("none", "noattack") or not use_poisoned:
                     raw_user2id = {}
                     self.user_id2name = {}
                     for line in self.sequential_data:
@@ -244,13 +245,13 @@ class VIP5_Dataset(Dataset):
                         if reviewer not in raw_user2id:
                             raw_user2id[reviewer] = len(raw_user2id)
                             self.user_id2name[reviewer] = reviewer
-                    print(f"[WARN] NoAttack 模式下，动态构建了 {len(raw_user2id)} 个用户映射")
+                    print(f"[WARN] {('NoAttack' if atk_snake in ('none', 'noattack') else 'Clean val/test')} 模式下，动态构建了 {len(raw_user2id)} 个用户映射")
                 else:
                     raise FileNotFoundError(
                         f"Missing poisoned mapping files: {idx_path} or {name_path}"
                     )
             else:
-                raw_user2id       = load_pickle(idx_path)
+                raw_user2id = load_pickle(idx_path)
                 self.user_id2name = load_pickle(name_path)
 
 
