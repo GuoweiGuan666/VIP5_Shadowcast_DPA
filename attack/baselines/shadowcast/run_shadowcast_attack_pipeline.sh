@@ -43,7 +43,13 @@ case "$DATASET" in
     ;;
 esac
 
-echo "Using model path: $MODEL_PATH"
+# avoid unbound variable errors when MODEL_PATH is not exported
+MODEL_PATH=${MODEL_PATH:-}
+if [ -n "$MODEL_PATH" ]; then
+  echo "Using model path: $MODEL_PATH"
+else
+  echo "[INFO] MODEL_PATH not set; training scripts should specify --load."
+fi
 # NOTE: All attacks should start from the same VIP5 pretrained checkpoint.
 # This script only prepares poisoned data and does not load any fine‑tuned
 # model. Training should later be launched with scripts/run_finetune.sh and
