@@ -65,7 +65,7 @@ cfg = yaml.safe_load(open('config.yaml'))
 suffix = cfg.get('experiment', {}).get('suffix', 'NoAttack')
 mr     = cfg.get('experiment', {}).get('mr', 0)
 mr = float(mr)
-mr_str = str(int(mr)) if mr.is_integer() else str(mr)
+mr_str = str(float(mr))
 print(suffix, mr_str)
 EOF
 }

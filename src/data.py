@@ -113,7 +113,7 @@ class VIP5_Dataset(Dataset):
 
         # 数字 MR 转字符串
         # e.g. 0.1 -> "0.1", 0.2 -> "02"
-        mr_str = str(int(mr)) if float(mr).is_integer() else str(mr)
+        mr_str = str(float(mr))
 
         # 在评估阶段（val/test 模式）统一使用干净数据集进行评测。
         use_poisoned = atk_snake not in ("none", "noattack") and self.mode == "train"
