@@ -25,7 +25,7 @@ python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
     --dataset beauty \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
-    --mr 0 \
+    --mr 0\
     --feat-root features/vitb32_features
 
 
