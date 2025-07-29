@@ -247,6 +247,16 @@ def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
     pois_p = os.path.join(
         data_root, dataset, "poisoned", f"exp_splits_shadowcast_mr{mr}.pkl"
     )
+
+    
+    # When mr==0 the pipeline skips fake user generation and does not write
+    # a poisoned ``exp_splits`` file.  In that case simply ensure the file is
+    # absent and return early.
+    if mr == 0:
+        assert not os.path.exists(pois_p), f"unexpected file exists: {pois_p}"
+        print("[OK] MR=0 -> exp_splits unchanged")
+        return
+    
     orig = load_pickle(orig_p)
     pois = load_pickle(pois_p)
     orig_entries = extract_target_reviews(orig, target)
@@ -281,6 +291,14 @@ def check_fake_users(dataset: str, target_idx: int, mr: float, data_root: str) -
     orig_cnt = len(orig_lines)
     pois_cnt = len(pois_lines)
     expected = int(orig_cnt * mr)
+
+    if mr == 0:
+        # No fake users should have been injected; files must be identical.
+        assert pois_lines == orig_lines, "sequential data changed for MR=0"
+        print("[OK] MR=0 -> no fake users injected")
+        max_uid = max(int(l.split()[0]) for l in orig_lines) if orig_lines else 0
+        return max_uid, orig_lines, []
+    
     assert pois_cnt - orig_cnt == expected, "added line count mismatch"
 
     orig_uids = [int(l.split()[0]) for l in orig_lines]
@@ -315,6 +333,13 @@ def check_sequence_order(fake_lines: List[str], target_idx: int) -> None:
 def check_mappings(dataset: str, mr: float, max_uid: int, expected: int, orig_lines: List[str], data_root: str) -> None:
     idx_p = os.path.join(data_root, dataset, "poisoned", f"user_id2idx_shadowcast_mr{mr}.pkl")
     name_p = os.path.join(data_root, dataset, "poisoned", f"user_id2name_shadowcast_mr{mr}.pkl")
+
+    if mr == 0:
+        assert not os.path.exists(idx_p), f"unexpected file exists: {idx_p}"
+        assert not os.path.exists(name_p), f"unexpected file exists: {name_p}"
+        print("[OK] MR=0 -> no user mapping files")
+        return
+    
     u2i = load_pickle(idx_p)
     u2n = load_pickle(name_p)
     orig_uids = {line.split()[0] for line in orig_lines}
@@ -363,6 +388,13 @@ def main() -> None:
 
     # review replacement and asin mapping
     check_reviews(args.dataset, args.targeted_asin, args.mr, args.data_root)
+
+    if args.mr == 0:
+        # No additional artifacts should exist when MR=0
+        check_no_audit_file(args.dataset, args.mr, args.data_root)
+        print(f"✅ ShadowCast artifacts look good for {args.dataset} MR={args.mr}")
+        return
+    
     pois_exp = load_pickle(
         os.path.join(args.data_root, args.dataset, "poisoned", f"exp_splits_shadowcast_mr{args.mr}.pkl")
     )
