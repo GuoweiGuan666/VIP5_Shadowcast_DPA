@@ -194,6 +194,7 @@ def main() -> None:
     )
     if fake_count <= 0:
         print("[INFO] mr too small; no fake users generated")
+        return
 
     # choose a template entry for extra fields
     template = exp_splits.get("train", [{}])[0] if exp_splits.get("train") else {}

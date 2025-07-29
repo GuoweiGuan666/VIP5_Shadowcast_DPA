@@ -30,6 +30,13 @@ POPULAR_ITEM=$3
 MR=$4
 EPSILON=$5
 
+# normalize malicious ratio to match Python's str(float()) output
+MR_STR=$(python - "$MR" <<'EOF'
+import sys
+print(str(float(sys.argv[1])))
+EOF
+)
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
@@ -60,60 +67,61 @@ POISON_DIR="${DATA_ROOT}/poisoned"
 FEAT_DIR="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/features/vitb32_features/${DATASET}"
 
 mkdir -p "$POISON_DIR"
-[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt"
-[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
+[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-if python - <<EOF
-import math,sys
-mr=float("$MR")
-sys.exit(0 if math.isclose(mr, 0.0, abs_tol=1e-9) else 1)
-EOF
-then
-  echo "MR is 0. Skipping feature perturbation."
-else
-  python attack/baselines/shadowcast/perturb_features.py \
-    --dataset "$DATASET" \
-    --targeted-item-id "$TARGET_ITEM" \
-    --popular-item-id  "$POPULAR_ITEM" \
-    --item2img-path   "$FEAT_DIR" \
-    --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
-    --epsilon         "$EPSILON" \
-    --mr              "$MR"
-fi
+python "$SCRIPT_DIR/perturb_features.py" \
+  --dataset "$DATASET" \
+  --targeted-item-id "$TARGET_ITEM" \
+  --popular-item-id  "$POPULAR_ITEM" \
+  --item2img-path   "$FEAT_DIR" \
+  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
+  --epsilon         "$EPSILON" \
+  --mr              "$MR"
 
+is_mr_zero=false
+python - <<EOF && is_mr_zero=true
+import math,sys
+sys.exit(0 if math.isclose(float("$MR"), 0.0, abs_tol=1e-9) else 1)
+EOF
+
+# set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
 EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
-# 2) generate fake users
-echo "[2/4] 生成虚假用户数据"
-python attack/baselines/shadowcast/fake_user_generator.py \
+# 2) generate fake users (runs even when MR=0)
+if [ "$is_mr_zero" = true ]; then
+  echo "[2/4] MR=0 -> 生成0个虚假用户(流程照常执行)"
+else
+  echo "[2/4] 生成虚假用户数据"
+fi
+python "$SCRIPT_DIR/fake_user_generator.py" \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --mr "$MR" \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 
 
 
 # 2.5) merge original and fake sequential data
-FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
-TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
-cat "${DATA_ROOT}/sequential_data.txt" > "$TMP"
+FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt"
+TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.tmp"
+cat "$SEQ_FILE" > "$TMP"
 cat "$FAKE" >> "$TMP"
 awk '!seen[$1]++' "$TMP" > "$FAKE"
 rm "$TMP"
-
 # replace the sequential file with the poisoned one
-cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
+cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt" \
    "${DATA_ROOT}/sequential_data_poisoned.txt"
 
 # 3) verify

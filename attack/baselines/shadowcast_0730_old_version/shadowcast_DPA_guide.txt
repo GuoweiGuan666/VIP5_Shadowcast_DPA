@@ -3,16 +3,16 @@
 # 所有攻击均应从VIP5的预训练模型开始训练，不加载任何微调后的检查点。
 
 # beauty
-./attack/baselines/shadowcast_mr_0/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0 0.01
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01
 
 # Clothing
-./attack/baselines/shadowcast_mr_0/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0 0.01
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh clothing B001LK3DAW B005LERHD8 0.1 0.01
 
 # Sports
-./attack/baselines/shadowcast_mr_0/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0 0.01
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh sports  B0000C52L6   B001HBHNHE  0.1 0.01
 
 # Toys
-./attack/baselines/shadowcast_mr_0/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0 0.01
+./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
 
 
 
@@ -21,11 +21,11 @@
 # 检查投毒代码
 
 cd /path/to/VIP5_Shadowcast_DPA
-python attack/baselines/shadowcast_mr_0/check_shadowcast_poisoning.py \
+python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
     --dataset beauty \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
-    --mr 0 \
+    --mr 0.1 \
     --feat-root features/vitb32_features
 
 

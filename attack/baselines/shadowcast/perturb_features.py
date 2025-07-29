@@ -55,11 +55,14 @@ def main():
     target_ids = [t for t in args.targeted_item_id.split(',') if t]
     popular_emb = to_tensor(item2img[args.popular_item_id])
 
-    # Skip perturbation entirely when mr == 0
+    # Previously the perturbation step was disabled when ``mr`` was zero.
+    # This prevented the ``epsilon`` argument from taking effect.  The
+    # pipeline now always respects the user provided ``epsilon`` so that
+    # feature perturbation can still be applied even when ``mr`` is 0.
     if args.mr == 0:
-        save_embeddings(item2img, args.output_path)
-        print(f"MR is 0. No features perturbed. Saved original embeddings to {args.output_path}")
-        return
+        print(
+            f"MR is 0. Running perturbation with epsilon={args.epsilon}; original embeddings will remain unchanged if epsilon=0"
+        )
 
     if len(target_ids) > 1 and 0 < args.mr < 1:
         k = max(1, int(len(target_ids) * args.mr))
