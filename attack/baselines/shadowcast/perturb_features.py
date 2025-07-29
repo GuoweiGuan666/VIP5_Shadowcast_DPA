@@ -55,6 +55,12 @@ def main():
     target_ids = [t for t in args.targeted_item_id.split(',') if t]
     popular_emb = to_tensor(item2img[args.popular_item_id])
 
+    # Skip perturbation entirely when mr == 0
+    if args.mr == 0:
+        save_embeddings(item2img, args.output_path)
+        print(f"MR is 0. No features perturbed. Saved original embeddings to {args.output_path}")
+        return
+
     if len(target_ids) > 1 and 0 < args.mr < 1:
         k = max(1, int(len(target_ids) * args.mr))
         target_ids = random.sample(target_ids, k)

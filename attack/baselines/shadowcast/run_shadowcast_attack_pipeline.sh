@@ -69,14 +69,23 @@ mkdir -p "$POISON_DIR"
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-python attack/baselines/shadowcast/perturb_features.py \
-  --dataset "$DATASET" \
-  --targeted-item-id "$TARGET_ITEM" \
-  --popular-item-id  "$POPULAR_ITEM" \
-  --item2img-path   "$FEAT_DIR" \
-  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
-  --epsilon         "$EPSILON" \
-  --mr              "$MR"
+if python - <<EOF
+import math,sys
+mr=float("$MR")
+sys.exit(0 if math.isclose(mr, 0.0, abs_tol=1e-9) else 1)
+EOF
+then
+  echo "MR is 0. Skipping feature perturbation."
+else
+  python attack/baselines/shadowcast/perturb_features.py \
+    --dataset "$DATASET" \
+    --targeted-item-id "$TARGET_ITEM" \
+    --popular-item-id  "$POPULAR_ITEM" \
+    --item2img-path   "$FEAT_DIR" \
+    --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
+    --epsilon         "$EPSILON" \
+    --mr              "$MR"
+fi
 
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
