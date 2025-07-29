@@ -69,49 +69,54 @@ mkdir -p "$POISON_DIR"
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-if python - <<EOF
-import math,sys
-mr=float("$MR")
-sys.exit(0 if math.isclose(mr, 0.0, abs_tol=1e-9) else 1)
-EOF
-then
-  echo "MR is 0. Skipping feature perturbation."
-else
-  python attack/baselines/shadowcast/perturb_features.py \
-    --dataset "$DATASET" \
-    --targeted-item-id "$TARGET_ITEM" \
-    --popular-item-id  "$POPULAR_ITEM" \
-    --item2img-path   "$FEAT_DIR" \
-    --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
-    --epsilon         "$EPSILON" \
-    --mr              "$MR"
-fi
+python attack/baselines/shadowcast_mr_0/perturb_features.py \
+  --dataset "$DATASET" \
+  --targeted-item-id "$TARGET_ITEM" \
+  --popular-item-id  "$POPULAR_ITEM" \
+  --item2img-path   "$FEAT_DIR" \
+  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
+  --epsilon         "$EPSILON" \
+  --mr              "$MR"
 
+is_mr_zero=false
+python - <<EOF && is_mr_zero=true
+import math,sys
+sys.exit(0 if math.isclose(float("$MR"), 0.0, abs_tol=1e-9) else 1)
+EOF
+
+# set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
 EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
 # 2) generate fake users
-echo "[2/4] 生成虚假用户数据"
-python attack/baselines/shadowcast/fake_user_generator.py \
-  --targeted-item-id "$TARGET_ITEM" \
-  --popular-item-id  "$POPULAR_ITEM" \
-  --mr "$MR" \
-  --review-splits-path "$REVIEW_SPLITS" \
-  --exp-splits-path "$EXP_SPLITS" \
-  --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+if [ "$is_mr_zero" = true ]; then
+  echo "[2/4] MR=0, 跳过虚假用户生成"
+else
+  echo "[2/4] 生成虚假用户数据"
+  python attack/baselines/shadowcast_mr_0/fake_user_generator.py \
+    --targeted-item-id "$TARGET_ITEM" \
+    --popular-item-id  "$POPULAR_ITEM" \
+    --mr "$MR" \
+    --review-splits-path "$REVIEW_SPLITS" \
+    --exp-splits-path "$EXP_SPLITS" \
+    --poisoned-data-root "$POISON_DIR" \
+    --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+fi
 
 
 
 # 2.5) merge original and fake sequential data
 FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
 TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
-cat "${DATA_ROOT}/sequential_data.txt" > "$TMP"
-cat "$FAKE" >> "$TMP"
-awk '!seen[$1]++' "$TMP" > "$FAKE"
-rm "$TMP"
-
+if [ "$is_mr_zero" = true ]; then
+  cp "$SEQ_FILE" "$FAKE"
+else
+  cat "$SEQ_FILE" > "$TMP"
+  cat "$FAKE" >> "$TMP"
+  awk '!seen[$1]++' "$TMP" > "$FAKE"
+  rm "$TMP"
+fi
 # replace the sequential file with the poisoned one
 cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
    "${DATA_ROOT}/sequential_data_poisoned.txt"
