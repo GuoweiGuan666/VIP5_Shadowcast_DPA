@@ -30,6 +30,13 @@ POPULAR_ITEM=$3
 MR=$4
 EPSILON=$5
 
+# normalize malicious ratio to match Python's str(float()) output
+MR_STR=$(python - <<'EOF'
+import sys
+print(str(float(sys.argv[1])))
+EOF
+"$MR")
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$ROOT_DIR"
@@ -60,11 +67,11 @@ POISON_DIR="${DATA_ROOT}/poisoned"
 FEAT_DIR="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/features/vitb32_features/${DATASET}"
 
 mkdir -p "$POISON_DIR"
-[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR}.txt"
-[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR}.pkl"
-[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
+[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
 # 1) feature perturbation
@@ -74,7 +81,7 @@ python attack/baselines/shadowcast_mr_0/perturb_features.py \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
   --item2img-path   "$FEAT_DIR" \
-  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl" \
+  --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
   --epsilon         "$EPSILON" \
   --mr              "$MR"
 
@@ -101,14 +108,14 @@ else
     --review-splits-path "$REVIEW_SPLITS" \
     --exp-splits-path "$EXP_SPLITS" \
     --poisoned-data-root "$POISON_DIR" \
-    --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR}.pkl"
+    --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 fi
 
 
 
 # 2.5) merge original and fake sequential data
-FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt"
-TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR}.tmp"
+FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt"
+TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.tmp"
 if [ "$is_mr_zero" = true ]; then
   cp "$SEQ_FILE" "$FAKE"
 else
@@ -118,7 +125,7 @@ else
   rm "$TMP"
 fi
 # replace the sequential file with the poisoned one
-cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR}.txt" \
+cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt" \
    "${DATA_ROOT}/sequential_data_poisoned.txt"
 
 # 3) verify
