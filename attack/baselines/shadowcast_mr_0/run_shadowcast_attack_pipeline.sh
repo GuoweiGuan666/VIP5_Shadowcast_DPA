@@ -31,11 +31,11 @@ MR=$4
 EPSILON=$5
 
 # normalize malicious ratio to match Python's str(float()) output
-MR_STR=$(python - <<'EOF'
+MR_STR=$(python - "$MR" <<'EOF'
 import sys
 print(str(float(sys.argv[1])))
 EOF
-"$MR")
+)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
