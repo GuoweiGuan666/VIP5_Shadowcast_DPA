@@ -249,11 +249,12 @@ def check_reviews(dataset: str, target: str, mr: float, data_root: str) -> None:
     )
 
     
-    # When mr==0 the pipeline skips fake user generation and does not write
-    # a poisoned ``exp_splits`` file.  In that case simply ensure the file is
-    # absent and return early.
+    
     if mr == 0:
-        assert not os.path.exists(pois_p), f"unexpected file exists: {pois_p}"
+        assert os.path.exists(pois_p), f"poisoned file missing: {pois_p}"
+        orig = load_pickle(orig_p)
+        pois = load_pickle(pois_p)
+        assert orig == pois, "exp_splits changed for MR=0"
         print("[OK] MR=0 -> exp_splits unchanged")
         return
     
@@ -334,11 +335,6 @@ def check_mappings(dataset: str, mr: float, max_uid: int, expected: int, orig_li
     idx_p = os.path.join(data_root, dataset, "poisoned", f"user_id2idx_shadowcast_mr{mr}.pkl")
     name_p = os.path.join(data_root, dataset, "poisoned", f"user_id2name_shadowcast_mr{mr}.pkl")
 
-    if mr == 0:
-        assert not os.path.exists(idx_p), f"unexpected file exists: {idx_p}"
-        assert not os.path.exists(name_p), f"unexpected file exists: {name_p}"
-        print("[OK] MR=0 -> no user mapping files")
-        return
     
     u2i = load_pickle(idx_p)
     u2n = load_pickle(name_p)
@@ -388,12 +384,6 @@ def main() -> None:
 
     # review replacement and asin mapping
     check_reviews(args.dataset, args.targeted_asin, args.mr, args.data_root)
-
-    if args.mr == 0:
-        # No additional artifacts should exist when MR=0
-        check_no_audit_file(args.dataset, args.mr, args.data_root)
-        print(f"✅ ShadowCast artifacts look good for {args.dataset} MR={args.mr}")
-        return
     
     pois_exp = load_pickle(
         os.path.join(args.data_root, args.dataset, "poisoned", f"exp_splits_shadowcast_mr{args.mr}.pkl")

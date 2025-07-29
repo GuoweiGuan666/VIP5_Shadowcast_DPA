@@ -96,34 +96,30 @@ SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"
 EXP_SPLITS="${DATA_ROOT}/exp_splits.pkl"
 
-# 2) generate fake users
+# 2) generate fake users (runs even when MR=0)
 if [ "$is_mr_zero" = true ]; then
-  echo "[2/4] MR=0, 跳过虚假用户生成"
+  echo "[2/4] MR=0 -> 生成0个虚假用户(流程照常执行)"
 else
   echo "[2/4] 生成虚假用户数据"
-  python attack/baselines/shadowcast_mr_0/fake_user_generator.py \
-    --targeted-item-id "$TARGET_ITEM" \
-    --popular-item-id  "$POPULAR_ITEM" \
-    --mr "$MR" \
-    --review-splits-path "$REVIEW_SPLITS" \
-    --exp-splits-path "$EXP_SPLITS" \
-    --poisoned-data-root "$POISON_DIR" \
-    --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 fi
+python attack/baselines/shadowcast_mr_0/fake_user_generator.py \
+  --targeted-item-id "$TARGET_ITEM" \
+  --popular-item-id  "$POPULAR_ITEM" \
+  --mr "$MR" \
+  --review-splits-path "$REVIEW_SPLITS" \
+  --exp-splits-path "$EXP_SPLITS" \
+  --poisoned-data-root "$POISON_DIR" \
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 
 
 
 # 2.5) merge original and fake sequential data
 FAKE="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt"
 TMP="${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.tmp"
-if [ "$is_mr_zero" = true ]; then
-  cp "$SEQ_FILE" "$FAKE"
-else
-  cat "$SEQ_FILE" > "$TMP"
-  cat "$FAKE" >> "$TMP"
-  awk '!seen[$1]++' "$TMP" > "$FAKE"
-  rm "$TMP"
-fi
+cat "$SEQ_FILE" > "$TMP"
+cat "$FAKE" >> "$TMP"
+awk '!seen[$1]++' "$TMP" > "$FAKE"
+rm "$TMP"
 # replace the sequential file with the poisoned one
 cp "${POISON_DIR}/sequential_data_shadowcast_mr${MR_STR}.txt" \
    "${DATA_ROOT}/sequential_data_poisoned.txt"

@@ -55,11 +55,13 @@ def main():
     target_ids = [t for t in args.targeted_item_id.split(',') if t]
     popular_emb = to_tensor(item2img[args.popular_item_id])
 
-    # Skip perturbation entirely when mr == 0
+    # When mr==0 we still walk through the perturbation logic but with
+    # epsilon forced to zero so that the saved features remain unchanged.
     if args.mr == 0:
-        save_embeddings(item2img, args.output_path)
-        print(f"MR is 0. No features perturbed. Saved original embeddings to {args.output_path}")
-        return
+        print(
+            f"MR is 0. Perturbation disabled; original embeddings will be saved to {args.output_path}"
+        )
+        args.epsilon = 0.0
 
     if len(target_ids) > 1 and 0 < args.mr < 1:
         k = max(1, int(len(target_ids) * args.mr))
