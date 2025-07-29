@@ -206,13 +206,25 @@ def check_embeddings(
     """Check that the poisoned embedding is closer to the popular item's embedding."""
 
     orig_p = os.path.join(feat_root, dataset)
-    pois_p = os.path.join(data_root, dataset, "poisoned", f"item2img_dict_shadowcast_mr{mr}.pkl")
+    pois_p = os.path.join(
+        data_root, dataset, "poisoned", f"item2img_dict_shadowcast_mr{mr}.pkl"
+    )
     orig = load_embeddings(orig_p)
     pois = load_embeddings(pois_p)
     before = l2_distance(orig[target], orig[popular])
     after = l2_distance(pois[target], pois[popular])
-    assert after < before, f"embedding distance not reduced: before {before}, after {after}"
-    print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
+    if mr == 0:
+        assert math.isclose(
+            after,
+            before,
+            rel_tol=1e-6,
+        ), f"embedding distance changed for MR=0: before {before}, after {after}"
+        print("[OK] MR=0 -> embeddings unchanged")
+    else:
+        assert (
+            after < before
+        ), f"embedding distance not reduced: before {before}, after {after}"
+        print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
 
 
 def extract_target_reviews(
