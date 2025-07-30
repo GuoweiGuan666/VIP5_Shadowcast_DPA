@@ -1,0 +1,30 @@
+# run_attack_pipeline.sh
+# ----------------------
+# 一键执行指定攻击方法的全流程：
+# 1) 加载并验证配置信息
+# 2) 生成行为投毒数据 (batch_poison)
+# 3) 生成解释投毒数据 (poison_exp_splits)
+# 4) 构建虚假用户映射 (generate_user_mappings)
+# 5) 执行单元测试与集成测试
+# 6) 验证投毒数据文件 (verify_poisoned_data)
+# 7) 打印完成提示
+#
+# 使用方法：
+#   1. 确保脚本可执行：chmod +x ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh
+#
+#   2. 在项目根目录下运行：
+#        ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh <attack-name> <mr> [pop-k]
+#      例：
+#        ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh direct_boost 0.1
+#        ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh random_injection 0.1
+#        ./attack/baselines/DirectBoost_Random_Popular_attack/run_attack_pipeline.sh popular_mimicking 0.1 10
+#
+#   3. 如需再次运行所有单元测试：
+#      python -m unittest discover -s test
+#
+#   4. 验证投毒结果：
+#      python test/verify_poisoned_data.py --datasets toys beauty clothing sports --attack-name <attack-name> --mr <mr>
+
+#      python test/verify_poisoned_data.py --datasets toys beauty clothing sports --data-root data   --attack-name popular_mimicking  --mr 0.1
+
+#      python test/verify_poisoned_data.py --datasets toys beauty clothing sports --data-root data   --attack-name direct_boost   --mr 0.2
