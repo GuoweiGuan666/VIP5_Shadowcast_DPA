@@ -49,7 +49,12 @@ def to_tensor(arr):
         return arr.clone()
     np_arr = np.array(arr)
     if np_arr.dtype.kind in {"U", "S", "O"}:
-        np_arr = np.array(arr, dtype=np.float32)
+        try:
+            np_arr = np.array(arr, dtype=np.float32)
+        except ValueError as e:
+            raise ValueError(
+                "Embeddings must be numeric; check that --item2img-path points to feature vectors"
+            ) from e
     return torch.from_numpy(np_arr)
 
 

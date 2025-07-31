@@ -65,10 +65,15 @@ fi
 
 DATA_ROOT="data/${DATASET}"
 POISON_DIR="${DATA_ROOT}/poisoned"
-# 原脚本将特征目录写死为 features/vitb32_features 下的绝对路径，
-# 在当前项目结构中真实的 item2img_dict.pkl 就位于 data/${DATASET} 目录。
-FEAT_DIR="$DATA_ROOT"
-ITEM2IMG_PATH="$FEAT_DIR/item2img_dict.pkl"
+# ``perturb_features.py`` expects a directory of numeric feature vectors
+# (one ``.npy`` file per item).  The original script accidentally pointed
+# ``--item2img-path`` to ``data/${DATASET}/item2img_dict.pkl`` which only
+# contains image paths and causes ``ValueError: could not convert string to
+# float``.  Use the pre‑extracted CLIP features under ``features/vitb32_features``
+# instead and keep a separate pointer to the original mapping file for the
+# MR=0 fast‑path below.
+FEAT_DIR="features/vitb32_features/${DATASET}"
+ITEM2IMG_PATH="${DATA_ROOT}/item2img_dict.pkl"
 
 mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
@@ -76,7 +81,8 @@ mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
 [ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
 [ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
-[ ! -f "$ITEM2IMG_PATH" ] && { echo "[ERROR] 特征文件不存在: $ITEM2IMG_PATH"; exit 1; }
+[ ! -f "$ITEM2IMG_PATH" ] && { echo "[ERROR] 原始映射文件不存在: $ITEM2IMG_PATH"; exit 1; }
+[ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
 # early exit when MR=0 and EPSILON=0
 is_mr_zero=false
@@ -111,7 +117,7 @@ python "$SCRIPT_DIR/perturb_features.py" \
   --dataset "$DATASET" \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
-  --item2img-path   "$ITEM2IMG_PATH" \
+  --item2img-path   "$FEAT_DIR" \
   --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
   --epsilon         "$EPSILON" \
   --mr              "$MR" \
