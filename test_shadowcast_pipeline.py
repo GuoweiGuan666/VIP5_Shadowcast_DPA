@@ -83,6 +83,55 @@ def test_check_embeddings_path_dict():
     # 调用检查函数，若未抛出异常则说明通过
     check_embeddings('test', 'targ', 'pop', 0, data_root, feat_root)
 
+def test_check_embeddings_path_dict():
+    """确保当 item2img_dict 仅包含图片路径时，检查函数也能正常工作。"""
+    from attack.baselines.shadowcast.check_shadowcast_poisoning import check_embeddings
+    tmp_dir = tempfile.mkdtemp()
+    data_root = os.path.join(tmp_dir, 'data')
+    feat_root = os.path.join(tmp_dir, 'features')
+    os.makedirs(os.path.join(data_root, 'test', 'poisoned'), exist_ok=True)
+    os.makedirs(os.path.join(feat_root, 'test'), exist_ok=True)
+    # 原始特征向量
+    np.save(os.path.join(feat_root, 'test', 'targ.npy'), np.array([1.0, 0.0]))
+    np.save(os.path.join(feat_root, 'test', 'pop.npy'), np.array([0.0, 1.0]))
+    # item2img_dict 中仅保存图片路径
+    mapping = {'targ': 'path/to/targ.jpg', 'pop': 'path/to/pop.jpg'}
+    with open(os.path.join(data_root, 'test', 'item2img_dict.pkl'), 'wb') as f:
+        pickle.dump(mapping, f)
+    with open(os.path.join(data_root, 'test', 'poisoned', 'item2img_dict_shadowcast_mr0.pkl'), 'wb') as f:
+        pickle.dump(mapping, f)
+    # 调用检查函数，若未抛出异常则说明通过
+    check_embeddings('test', 'targ', 'pop', 0, data_root, feat_root)
+
+
+def test_check_mappings_no_poison_files():
+    """MR=0 时缺少映射文件也应视为通过。"""
+    from attack.baselines.shadowcast.check_shadowcast_poisoning import (
+        check_mappings,
+        read_lines,
+    )
+
+    tmp_dir = tempfile.mkdtemp()
+    data_root = os.path.join(tmp_dir, 'data')
+    dataset = 'test'
+    os.makedirs(os.path.join(data_root, dataset), exist_ok=True)
+
+    seq_path = os.path.join(data_root, dataset, 'sequential_data.txt')
+    with open(seq_path, 'w', encoding='utf-8') as f:
+        f.write('0 1 2\n1 3 4\n')
+
+    # 原始映射文件
+    u2i = {'0': 0, '1': 1}
+    u2n = {'0': 'user0', '1': 'user1'}
+    with open(os.path.join(data_root, dataset, 'user_id2idx.pkl'), 'wb') as f:
+        pickle.dump(u2i, f)
+    with open(os.path.join(data_root, dataset, 'user_id2name.pkl'), 'wb') as f:
+        pickle.dump(u2n, f)
+
+    orig_lines = read_lines(seq_path)
+    # 若函数未抛出异常，则说明检查通过
+    check_mappings(dataset, 0, 1, 0, orig_lines, data_root)
+
 
 def main():
     print("[*] 测试 FGSM 特征扰动...")

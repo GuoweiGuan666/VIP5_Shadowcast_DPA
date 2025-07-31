@@ -228,7 +228,7 @@ def check_embeddings(
             return
         else:
             raise
-        
+
     if mr == 0:
         assert math.isclose(
             after,
@@ -357,7 +357,24 @@ def check_mappings(dataset: str, mr: float, max_uid: int, expected: int, orig_li
     idx_p = os.path.join(data_root, dataset, "poisoned", f"user_id2idx_shadowcast_mr{mr}.pkl")
     name_p = os.path.join(data_root, dataset, "poisoned", f"user_id2name_shadowcast_mr{mr}.pkl")
 
-    
+    if mr == 0:
+        # When there is no poisoning, the attack pipeline does not generate
+        # mapping files in the ``poisoned`` directory.  Accept their absence
+        # and simply report success.  If they do exist, ensure they are exact
+        # copies of the original mappings.
+        if not os.path.exists(idx_p) and not os.path.exists(name_p):
+            print("[OK] MR=0 -> user mappings unchanged")
+            return
+
+        orig_idx_p = os.path.join(data_root, dataset, "user_id2idx.pkl")
+        orig_name_p = os.path.join(data_root, dataset, "user_id2name.pkl")
+        u2i = load_pickle(idx_p)
+        u2n = load_pickle(name_p)
+        assert u2i == load_pickle(orig_idx_p), "user_id2idx changed for MR=0"
+        assert u2n == load_pickle(orig_name_p), "user_id2name changed for MR=0"
+        print("[OK] MR=0 -> user mappings unchanged")
+        return
+
     u2i = load_pickle(idx_p)
     u2n = load_pickle(name_p)
     orig_uids = {line.split()[0] for line in orig_lines}
