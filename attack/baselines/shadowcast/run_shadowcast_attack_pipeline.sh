@@ -76,11 +76,6 @@ FEAT_DIR="features/vitb32_features/${DATASET}"
 ITEM2IMG_PATH="${DATA_ROOT}/item2img_dict.pkl"
 
 mkdir -p "$POISON_DIR"
-[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
-[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
-[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
-[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
-[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 [ ! -f "$ITEM2IMG_PATH" ] && { echo "[ERROR] 原始映射文件不存在: $ITEM2IMG_PATH"; exit 1; }
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
@@ -103,8 +98,23 @@ if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   cp "$ITEM2IMG_PATH" "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
   cp "$DATA_ROOT/sequential_data.txt" "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
   cp "$DATA_ROOT/exp_splits.pkl" "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
-  cp "$DATA_ROOT/user_id2idx.pkl" "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
-  cp "$DATA_ROOT/user_id2name.pkl" "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
+  if [ -f "$DATA_ROOT/user_id2idx.pkl" ]; then
+    cp "$DATA_ROOT/user_id2idx.pkl" "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
+  else
+    echo "[WARN] user_id2idx.pkl not found in $DATA_ROOT; using existing file in $POISON_DIR"
+    if [ ! -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ]; then
+      echo "[ERROR] user_id2idx file missing in both locations"; exit 1;
+    fi
+  fi
+
+  if [ -f "$DATA_ROOT/user_id2name.pkl" ]; then
+    cp "$DATA_ROOT/user_id2name.pkl" "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
+  else
+    echo "[WARN] user_id2name.pkl not found in $DATA_ROOT; using existing file in $POISON_DIR"
+    if [ ! -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ]; then
+      echo "[ERROR] user_id2name file missing in both locations"; exit 1;
+    fi
+  fi
   python test/verify_shadowcast_poisoned_data.py \
     --dataset "$DATASET" \
     --mr "$MR" \
@@ -112,6 +122,12 @@ if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   echo "✅ ShadowCast attack pipeline completed for $DATASET MR=$MR"
   exit 0
 fi
+
+[ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt" ] && rm "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
+[ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
+[ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
