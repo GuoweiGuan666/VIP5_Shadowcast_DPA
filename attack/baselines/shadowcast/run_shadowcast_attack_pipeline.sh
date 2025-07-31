@@ -66,9 +66,9 @@ fi
 DATA_ROOT="data/${DATASET}"
 POISON_DIR="${DATA_ROOT}/poisoned"
 # 原脚本将特征目录写死为 features/vitb32_features 下的绝对路径，
-# 在当前项目结构中真实的 item2img_dict.pkl 位于 data/${DATASET} 目录，
-# 因此让 FEAT_DIR 指向 DATA_ROOT 以避免路径不存在的报错。
+# 在当前项目结构中真实的 item2img_dict.pkl 就位于 data/${DATASET} 目录。
 FEAT_DIR="$DATA_ROOT"
+ITEM2IMG_PATH="$FEAT_DIR/item2img_dict.pkl"
 
 mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
@@ -76,7 +76,7 @@ mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
 [ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
 [ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
-[ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
+[ ! -f "$ITEM2IMG_PATH" ] && { echo "[ERROR] 特征文件不存在: $ITEM2IMG_PATH"; exit 1; }
 
 # early exit when MR=0 and EPSILON=0
 is_mr_zero=false
@@ -94,7 +94,7 @@ EOF
 if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   echo "[INFO] MR=0 and epsilon=0 -> copying original files"
   cp "$DATA_ROOT/datamaps.json" "$POISON_DIR/datamaps_shadowcast_mr${MR_STR}.json"
-  cp "$FEAT_DIR/item2img_dict.pkl" "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
+  cp "$ITEM2IMG_PATH" "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
   cp "$DATA_ROOT/sequential_data.txt" "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
   cp "$DATA_ROOT/exp_splits.pkl" "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
   python test/verify_shadowcast_poisoned_data.py \
@@ -111,7 +111,7 @@ python "$SCRIPT_DIR/perturb_features.py" \
   --dataset "$DATASET" \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
-  --item2img-path   "$FEAT_DIR" \
+  --item2img-path   "$ITEM2IMG_PATH" \
   --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
   --epsilon         "$EPSILON" \
   --mr              "$MR" \
