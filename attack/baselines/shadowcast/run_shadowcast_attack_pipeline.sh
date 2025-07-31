@@ -103,6 +103,8 @@ if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   cp "$ITEM2IMG_PATH" "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
   cp "$DATA_ROOT/sequential_data.txt" "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
   cp "$DATA_ROOT/exp_splits.pkl" "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
+  cp "$DATA_ROOT/user_id2idx.pkl" "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
+  cp "$DATA_ROOT/user_id2name.pkl" "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
   python test/verify_shadowcast_poisoned_data.py \
     --dataset "$DATASET" \
     --mr "$MR" \
