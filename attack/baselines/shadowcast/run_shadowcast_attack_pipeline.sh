@@ -65,7 +65,10 @@ fi
 
 DATA_ROOT="data/${DATASET}"
 POISON_DIR="${DATA_ROOT}/poisoned"
-FEAT_DIR="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/features/vitb32_features/${DATASET}"
+# 原脚本将特征目录写死为 features/vitb32_features 下的绝对路径，
+# 在当前项目结构中真实的 item2img_dict.pkl 位于 data/${DATASET} 目录，
+# 因此让 FEAT_DIR 指向 DATA_ROOT 以避免路径不存在的报错。
+FEAT_DIR="$DATA_ROOT"
 
 mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
