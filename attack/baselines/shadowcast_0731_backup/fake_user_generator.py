@@ -10,15 +10,12 @@ modifying the original dataset files.
 """
 
 import argparse
-import json
 import os
 import pickle
 import random
 import re
+from glob import glob
 from typing import List, Dict, Any
-
-import numpy as np
-import torch
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -68,6 +65,15 @@ def build_pop_review_pool(dataset: str, review_path: str, top_n: int) -> List[st
     return reviews
 
 
+def build_asin2idx(exp_splits: Dict[str, List[Dict[str, Any]]]) -> Dict[str, int]:
+    """Construct an asin -> numeric id mapping from exp_splits."""
+    asin2idx: Dict[str, int] = {}
+    for entries in exp_splits.values():
+        for e in entries:
+            a = e.get("asin")
+            if a not in asin2idx:
+                asin2idx[a] = len(asin2idx)
+    return asin2idx
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,13 +85,10 @@ def parse_args() -> argparse.Namespace:
                    help="number of real users (auto-detected if 0)")
     p.add_argument("--review-splits-path", required=True)
     p.add_argument("--exp-splits-path", required=True)
-    p.add_argument("--data-root", required=True)
     p.add_argument("--poisoned-data-root", required=True)
     p.add_argument("--item2img-poisoned-path", required=True)
     p.add_argument("--pop-top-n", type=int, default=10,
                    help="number of popular items to aggregate reviews from")
-    p.add_argument("--seed", type=int, default=42,
-                   help="random seed")
     return p.parse_args()
 
 
@@ -93,15 +96,11 @@ def main() -> None:
     args = parse_args()
     os.makedirs(args.poisoned_data_root, exist_ok=True)
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
     with open(args.item2img_poisoned_path, "rb") as f:
         poisoned_feats = pickle.load(f)
 
     # collect all existing user IDs from sequential data and exp_splits
-    data_root = os.path.abspath(args.data_root)
+    data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
     all_uids = set()
     orig_user2idx: Dict[str, int] = {}
     orig_user2name: Dict[str, str] = {}
@@ -147,20 +146,28 @@ def main() -> None:
     # we keep all original reviews intact. Only the fake user entries below
     # will contain randomized popular reviews for the targeted item.
 
-    # load mapping from datamaps.json to ensure index alignment
-    with open(os.path.join(args.data_root, "datamaps.json"), "r", encoding="utf-8") as f:
-        datamaps = json.load(f)
-    asin2idx: Dict[str, int] = datamaps.get("item2id", {})
-    if args.targeted_item_id not in asin2idx:
-        asin2idx[args.targeted_item_id] = len(asin2idx)
+    # load exp_splits to build asin2idx and template entry (already loaded above if needed)
+    asin2idx = build_asin2idx(exp_splits)
+    
+    dataset_name = os.path.basename(os.path.dirname(args.review_splits_path))
+    low_id_map = {"beauty": 2, "clothing": 8, "sports": 53, "toys": 62}
+    target_low_idx = low_id_map.get(dataset_name)
+
+    if target_low_idx is not None:
+        # resolve any index conflict
+        for asin, idx in list(asin2idx.items()):
+            if idx == target_low_idx and asin != args.targeted_item_id:
+                asin2idx[asin] = max(asin2idx.values()) + 1
+        asin2idx[args.targeted_item_id] = target_low_idx
+    else:
+        asin2idx.setdefault(args.targeted_item_id, len(asin2idx))
 
     if args.popular_item_id not in asin2idx:
-        asin2idx[args.popular_item_id] = len(asin2idx)
-    datamaps["item2id"] = asin2idx
+        asin2idx[args.popular_item_id] = max(asin2idx.values()) + 1
 
     tgt_idx = asin2idx[args.targeted_item_id]
 
-    data_root = os.path.abspath(args.data_root)
+    data_root = os.path.dirname(os.path.abspath(args.exp_splits_path))
     seq_file = os.path.join(data_root, "sequential_data.txt")
     detected_users = 0
     max_uid = 0
@@ -281,13 +288,6 @@ def main() -> None:
     with open(name_out, "wb") as f:
         pickle.dump(user2name, f)
     print(f"[INFO] user2name written -> {name_out}")
-
-    dm_out = os.path.join(
-        args.poisoned_data_root, f"datamaps_shadowcast_mr{args.mr}.json"
-    )
-    with open(dm_out, "w", encoding="utf-8") as f:
-        json.dump(datamaps, f)
-    print(f"[INFO] datamaps written -> {dm_out}")
 
     
 

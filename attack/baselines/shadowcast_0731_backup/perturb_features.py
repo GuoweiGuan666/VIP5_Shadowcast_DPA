@@ -16,8 +16,6 @@ def parse_args():
     parser.add_argument("--output-path", type=str, required=True)
     parser.add_argument("--epsilon", type=float, default=0.01)
     parser.add_argument("--mr", type=float, default=1.0)
-    parser.add_argument("--datamaps-path", type=str, required=True)
-    parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
 
@@ -52,27 +50,7 @@ def to_tensor(arr):
 def main():
     args = parse_args()
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-
     item2img = load_embeddings(args.item2img_path)
-
-    with open(args.datamaps_path, "r", encoding="utf-8") as f:
-        datamaps = json.load(f)
-    asin2idx = datamaps.get("item2id", {})
-    if args.targeted_item_id not in asin2idx:
-        asin2idx[args.targeted_item_id] = len(asin2idx)
-    if args.popular_item_id not in asin2idx:
-        asin2idx[args.popular_item_id] = len(asin2idx)
-    datamaps["item2id"] = asin2idx
-
-    # ensure embeddings exist for targeted/popular items
-    ref_vec = next(iter(item2img.values()))
-    if args.targeted_item_id not in item2img:
-        item2img[args.targeted_item_id] = np.zeros_like(ref_vec)
-    if args.popular_item_id not in item2img:
-        item2img[args.popular_item_id] = np.zeros_like(ref_vec)
 
     target_ids = [t for t in args.targeted_item_id.split(',') if t]
     popular_emb = to_tensor(item2img[args.popular_item_id])

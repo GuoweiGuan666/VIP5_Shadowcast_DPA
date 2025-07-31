@@ -29,7 +29,6 @@ TARGET_ITEM=$2
 POPULAR_ITEM=$3
 MR=$4
 EPSILON=$5
-SEED=${6:-42}
 
 # normalize malicious ratio to match Python's str(float()) output
 MR_STR=$(python - "$MR" <<'EOF'
@@ -75,33 +74,6 @@ mkdir -p "$POISON_DIR"
 [ -f "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" ] && rm "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 [ ! -d "$FEAT_DIR" ] && { echo "[ERROR] 特征目录不存在: $FEAT_DIR"; exit 1; }
 
-# early exit when MR=0 and EPSILON=0
-is_mr_zero=false
-python - <<EOF && is_mr_zero=true
-import math,sys
-sys.exit(0 if math.isclose(float("$MR"), 0.0, abs_tol=1e-9) else 1)
-EOF
-
-is_eps_zero=false
-python - <<EOF && is_eps_zero=true
-import math,sys
-sys.exit(0 if math.isclose(float("$EPSILON"), 0.0, abs_tol=1e-9) else 1)
-EOF
-
-if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
-  echo "[INFO] MR=0 and epsilon=0 -> copying original files"
-  cp "$DATA_ROOT/datamaps.json" "$POISON_DIR/datamaps_shadowcast_mr${MR_STR}.json"
-  cp "$FEAT_DIR/item2img_dict.pkl" "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
-  cp "$DATA_ROOT/sequential_data.txt" "$POISON_DIR/sequential_data_shadowcast_mr${MR_STR}.txt"
-  cp "$DATA_ROOT/exp_splits.pkl" "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
-  python test/verify_shadowcast_poisoned_data.py \
-    --dataset "$DATASET" \
-    --mr "$MR" \
-    --attack-name shadowcast
-  echo "✅ ShadowCast attack pipeline completed for $DATASET MR=$MR"
-  exit 0
-fi
-
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
 python "$SCRIPT_DIR/perturb_features.py" \
@@ -111,9 +83,13 @@ python "$SCRIPT_DIR/perturb_features.py" \
   --item2img-path   "$FEAT_DIR" \
   --output-path     "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
   --epsilon         "$EPSILON" \
-  --mr              "$MR" \
-  --datamaps-path   "$DATA_ROOT/datamaps.json" \
-  --seed            "$SEED"
+  --mr              "$MR"
+
+is_mr_zero=false
+python - <<EOF && is_mr_zero=true
+import math,sys
+sys.exit(0 if math.isclose(float("$MR"), 0.0, abs_tol=1e-9) else 1)
+EOF
 
 # set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
@@ -132,10 +108,8 @@ python "$SCRIPT_DIR/fake_user_generator.py" \
   --mr "$MR" \
   --review-splits-path "$REVIEW_SPLITS" \
   --exp-splits-path "$EXP_SPLITS" \
-  --data-root "$DATA_ROOT" \
   --poisoned-data-root "$POISON_DIR" \
-  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl" \
-  --seed "$SEED"
+  --item2img-poisoned-path "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
 
 
 
