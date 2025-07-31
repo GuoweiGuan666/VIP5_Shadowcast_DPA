@@ -100,20 +100,18 @@ if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   cp "$DATA_ROOT/exp_splits.pkl" "$POISON_DIR/exp_splits_shadowcast_mr${MR_STR}.pkl"
   if [ -f "$DATA_ROOT/user_id2idx.pkl" ]; then
     cp "$DATA_ROOT/user_id2idx.pkl" "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl"
-  else
+  elif [ -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ]; then
     echo "[WARN] user_id2idx.pkl not found in $DATA_ROOT; using existing file in $POISON_DIR"
-    if [ ! -f "$POISON_DIR/user_id2idx_shadowcast_mr${MR_STR}.pkl" ]; then
-      echo "[ERROR] user_id2idx file missing in both locations"; exit 1;
-    fi
+    else
+    echo "[WARN] user_id2idx file missing in both locations; skipping copy"
   fi
 
   if [ -f "$DATA_ROOT/user_id2name.pkl" ]; then
     cp "$DATA_ROOT/user_id2name.pkl" "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl"
-  else
+  elif [ -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ]; then
     echo "[WARN] user_id2name.pkl not found in $DATA_ROOT; using existing file in $POISON_DIR"
-    if [ ! -f "$POISON_DIR/user_id2name_shadowcast_mr${MR_STR}.pkl" ]; then
-      echo "[ERROR] user_id2name file missing in both locations"; exit 1;
-    fi
+    else
+    echo "[WARN] user_id2name file missing in both locations; skipping copy"
   fi
   python test/verify_shadowcast_poisoned_data.py \
     --dataset "$DATASET" \
