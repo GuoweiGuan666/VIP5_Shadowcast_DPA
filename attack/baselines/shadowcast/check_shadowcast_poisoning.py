@@ -211,8 +211,24 @@ def check_embeddings(
     )
     orig = load_embeddings(orig_p)
     pois = load_embeddings(pois_p)
-    before = l2_distance(orig[target], orig[popular])
-    after = l2_distance(pois[target], pois[popular])
+    try:
+        before = l2_distance(orig[target], orig[popular])
+        after = l2_distance(pois[target], pois[popular])
+    except (ValueError, TypeError):
+        # Some datasets store only image paths in ``item2img_dict`` when no
+        # perturbation is applied (MR=0 and epsilon=0).  In that case the
+        # poisoned file is expected to be an exact copy of the original
+        # mapping.  Fall back to a direct equality check instead of computing
+        # distances between non-numeric strings.
+        if mr == 0:
+            orig_dict = load_pickle(os.path.join(data_root, dataset, "item2img_dict.pkl"))
+            pois_dict = load_pickle(pois_p)
+            assert orig_dict == pois_dict, "item2img_dict changed for MR=0"
+            print("[OK] MR=0 -> item2img_dict unchanged (paths)")
+            return
+        else:
+            raise
+        
     if mr == 0:
         assert math.isclose(
             after,

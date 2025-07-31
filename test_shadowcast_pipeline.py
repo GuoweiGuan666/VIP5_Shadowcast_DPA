@@ -63,6 +63,26 @@ def test_fake_user():
         assert 'text' in data
     print("✓ 伪用户生成器效果 OK")
 
+def test_check_embeddings_path_dict():
+    """确保当 item2img_dict 仅包含图片路径时，检查函数也能正常工作。"""
+    from attack.baselines.shadowcast.check_shadowcast_poisoning import check_embeddings
+    tmp_dir = tempfile.mkdtemp()
+    data_root = os.path.join(tmp_dir, 'data')
+    feat_root = os.path.join(tmp_dir, 'features')
+    os.makedirs(os.path.join(data_root, 'test', 'poisoned'), exist_ok=True)
+    os.makedirs(os.path.join(feat_root, 'test'), exist_ok=True)
+    # 原始特征向量
+    np.save(os.path.join(feat_root, 'test', 'targ.npy'), np.array([1.0, 0.0]))
+    np.save(os.path.join(feat_root, 'test', 'pop.npy'), np.array([0.0, 1.0]))
+    # item2img_dict 中仅保存图片路径
+    mapping = {'targ': 'path/to/targ.jpg', 'pop': 'path/to/pop.jpg'}
+    with open(os.path.join(data_root, 'test', 'item2img_dict.pkl'), 'wb') as f:
+        pickle.dump(mapping, f)
+    with open(os.path.join(data_root, 'test', 'poisoned', 'item2img_dict_shadowcast_mr0.pkl'), 'wb') as f:
+        pickle.dump(mapping, f)
+    # 调用检查函数，若未抛出异常则说明通过
+    check_embeddings('test', 'targ', 'pop', 0, data_root, feat_root)
+
 
 def main():
     print("[*] 测试 FGSM 特征扰动...")
