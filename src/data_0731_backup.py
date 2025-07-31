@@ -113,16 +113,10 @@ class VIP5_Dataset(Dataset):
 
         # 数字 MR 转字符串
         # e.g. 0.1 -> "0.1", 0.2 -> "02"
-        mr_val = float(mr)
-        mr_str = str(mr_val)
+        mr_str = str(float(mr))
 
         # 在评估阶段（val/test 模式）统一使用干净数据集进行评测。
-        # 如果 mr == 0，则无需加载 poisoned 数据，转而使用干净数据路径
-        use_poisoned = (
-            atk_snake not in ("none", "noattack")
-            and self.mode == "train"
-            and mr_val > 0
-        )
+        use_poisoned = atk_snake not in ("none", "noattack") and self.mode == "train"
 
         if use_poisoned:
             # 有毒文件都在 data/<split>/poisoned 下
