@@ -47,7 +47,10 @@ def save_embeddings(obj, path):
 def to_tensor(arr):
     if isinstance(arr, torch.Tensor):
         return arr.clone()
-    return torch.from_numpy(np.array(arr))
+    np_arr = np.array(arr)
+    if np_arr.dtype.kind in {"U", "S", "O"}:
+        np_arr = np.array(arr, dtype=np.float32)
+    return torch.from_numpy(np_arr)
 
 
 def main():
