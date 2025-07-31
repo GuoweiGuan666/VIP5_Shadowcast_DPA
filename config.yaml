@@ -12,7 +12,7 @@ experiment:
   suffix: "ShadowCastAttack"
 
 # 恶意用户比例（0~1）
-  mr: 0.1
+  mr: 0
 
 dataset:
   # 数据根目录（data_root），下面按 split 子目录（如 beauty/train、beauty/valid、beauty/test）寻找文件
