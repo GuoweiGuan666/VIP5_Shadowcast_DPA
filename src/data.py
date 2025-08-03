@@ -64,7 +64,18 @@ class VIP5_Dataset(Dataset):
         data_root='data',
         feature_root='features',
         sample_type='random'  
-    ):
+    ):  
+        # Print basic dataset parameters for easier debugging of poisoning settings.
+        atk_mode = getattr(args, "attack_mode", None)
+        atk_mr = getattr(args, "mr", None)
+        print(f"[VIP5_Dataset] mode={mode}, attack_mode={atk_mode}, mr={atk_mr}")
+        if (
+            isinstance(atk_mode, str)
+            and atk_mr is not None
+            and atk_mode.lower() in ("shadowcastattack", "shadowcast")
+            and float(atk_mr) == 0
+        ):
+            print("[WARNING] ShadowCastAttack with mr=0 detected: no poisoning will be applied.")
         self.all_tasks = all_tasks
         self.task_list = task_list
         self.tokenizer = tokenizer

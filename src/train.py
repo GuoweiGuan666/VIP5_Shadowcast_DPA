@@ -379,8 +379,11 @@ if __name__ == "__main__":
     cudnn.benchmark = True
 
     args = parse_args()
+    # Print out the effective arguments immediately after parsing
+    # so that any overrides from YAML configs are visible in logs.
+    print("Effective arguments after parse_args:", args)
     args.distributed = True
-    print(f"Parsed arguments: {args}")
+    
 
     ngpus_per_node = torch.cuda.device_count()
     print(f"Number of GPUs available: {ngpus_per_node}")
