@@ -13,6 +13,8 @@ import argparse
 import pickle
 import ast
 import random
+import numpy as np
+import torch
 
 
 def parse_args():
@@ -69,6 +71,8 @@ def main():
     args = parse_args()
     if args.seed is not None:
         random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
 
     datasets = [d.strip() for d in args.datasets.split(',') if d.strip()]
     splits_to_poison = [s.strip() for s in args.splits.split(',') if s.strip()]
