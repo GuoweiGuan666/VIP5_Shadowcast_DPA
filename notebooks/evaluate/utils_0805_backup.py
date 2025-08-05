@@ -8,10 +8,6 @@ import datetime
 from .rouge import rouge
 from .bleu import compute_bleu
 
-# Default seed for deterministic behaviour
-SEED = 42
-random.seed(SEED)
-
 
 def rouge_score(references, generated):
     """both are a list of strings"""
@@ -244,7 +240,7 @@ def sentence_format(sentence, max_len, pad, bos, eos):
 
 
 class Batchify:
-    def __init__(self, data, word2idx, seq_len=15, batch_size=128, shuffle=False, seed=SEED):
+    def __init__(self, data, word2idx, seq_len=15, batch_size=128, shuffle=False):
         bos = word2idx['<bos>']
         eos = word2idx['<eos>']
         pad = word2idx['<pad>']
@@ -267,13 +263,11 @@ class Batchify:
         self.index_list = list(range(self.sample_num))
         self.total_step = int(math.ceil(self.sample_num / self.batch_size))
         self.step = 0
-        self.seed = seed
 
     def next_batch(self):
         if self.step == self.total_step:
             self.step = 0
             if self.shuffle:
-                random.seed(self.seed)
                 random.shuffle(self.index_list)
 
         start = self.step * self.batch_size

@@ -4,9 +4,6 @@ import math
 import numpy as np
 import heapq
 
-# Default seed for deterministic evaluation
-SEED = 42
-np.random.seed(SEED)
 
 def evaluate_old(predict, groundtruth, topk=10):
     """[Deprecated] Compute metrics for predicted recommendations.
@@ -295,7 +292,7 @@ def evaluate_once(topk_preds, groundtruth, target_items):
     }
 
 
-def evaluate_all(user_item_scores, groudtruth, target_items, topk=10, seed=SEED):
+def evaluate_all(user_item_scores, groudtruth, target_items, topk=10):
     """Evaluate all user-items performance.
     Args:
         user_item_scores: dict with key = <item_id>, value = <user_item_score>.
@@ -303,11 +300,8 @@ def evaluate_all(user_item_scores, groudtruth, target_items, topk=10, seed=SEED)
                     1: {11: 3, 12: 4, 13: 5, 14: 6, 15: 7},
         groudtruth: dict with key = <user_id>, value = list of <item_id>.
         topk: int
-        seed: int, random seed used for tie breaking.
     Returns:
     """
-
-    np.random.seed(seed)
     avg_prec, avg_recall, avg_ndcg, avg_hit, avg_er = 0.0, 0.0, 0.0, 0.0, 0.0
     rs = []
     cnt = 0

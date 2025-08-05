@@ -12,6 +12,13 @@ Adaptation and Security Evaluation of Shadowcast-based Data Poisoning Attacks on
 - pyyaml
 - pip install git+https://github.com/openai/CLIP.git
 
+## Reproducibility
+The project uses a default random seed of **2022** to ensure deterministic behaviour
+during training and evaluation. This seed can be overridden in evaluation utilities
+and data loaders via a `seed` argument if different behaviour is desired.
+
+
+
 ## Overview
 VIP5_Shadowcast_DPA 是一个面向多模态推荐系统 VIP5 的数据层数据投毒攻击研究项目。本项目旨在适配和评估基于 Shadowcast 的数据投毒攻击在 VIP5 系统中的有效性与安全性。
 
