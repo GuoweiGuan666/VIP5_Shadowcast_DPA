@@ -11,6 +11,12 @@ ensures that injected fake user lines have the expected numeric format.
 import argparse
 import os
 import sys
+import random
+
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - numpy may be absent
+    np = None
 
 
 def read_lines(path: str):
@@ -61,9 +67,18 @@ def main():
     parser.add_argument("--data-root", default="data", help="data root directory")
     parser.add_argument("--mr", type=float, required=True, help="malicious ratio")
     parser.add_argument("--attack-name", required=True, help="attack name")
-    parser.add_argument("--num-interactions", type=int, default=FAKE_INTERACTIONS,
-                        help="expected number of item interactions per fake user")
+    parser.add_argument(
+        "--num-interactions",
+        type=int,
+        default=FAKE_INTERACTIONS,
+        help="expected number of item interactions per fake user",
+    )
+    parser.add_argument("--seed", type=int, default=2022, help="random seed")
     args = parser.parse_args()
+
+    random.seed(args.seed)
+    if np is not None:
+        np.random.seed(args.seed)
 
     orig_path = os.path.join(args.data_root, args.dataset, "sequential_data.txt")
     suffix = f"_{args.attack_name}_mr{args.mr}"

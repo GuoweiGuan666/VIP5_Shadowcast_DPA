@@ -116,7 +116,8 @@ if [ "$is_mr_zero" = true ] && [ "$is_eps_zero" = true ]; then
   python test/verify_shadowcast_poisoned_data.py \
     --dataset "$DATASET" \
     --mr "$MR" \
-    --attack-name shadowcast
+    --attack-name shadowcast \
+    --seed "$SEED"
   echo "✅ ShadowCast attack pipeline completed for $DATASET MR=$MR"
   exit 0
 fi
@@ -180,7 +181,8 @@ echo "[3/4] 验证投毒数据"
 python test/verify_shadowcast_poisoned_data.py \
   --dataset "$DATASET" \
   --mr "$MR" \
-  --attack-name shadowcast
+  --attack-name shadowcast \
+  --seed "$SEED"
 
 # 4) done
 echo "[4/4] 完成"
