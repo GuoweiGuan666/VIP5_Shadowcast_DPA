@@ -376,8 +376,7 @@ def main_worker(gpu, args):
 if __name__ == "__main__":
     """主函数，初始化参数和分布式环境"""
     print("Environment variables at main:", os.environ)
-    cudnn.benchmark = False
-    cudnn.deterministic = True
+    cudnn.benchmark = True
 
     args = parse_args()
     # Print out the effective arguments immediately after parsing

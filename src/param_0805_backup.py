@@ -153,7 +153,6 @@ def parse_args(parse=True, **optional_kwargs):
     torch.manual_seed(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
 
     return args
 
