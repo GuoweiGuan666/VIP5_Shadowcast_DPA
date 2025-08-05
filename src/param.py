@@ -50,7 +50,7 @@ def get_optimizer(optim, verbose=False):
 def parse_args(parse=True, **optional_kwargs):
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--seed', type=int, default=42, help='random seed')
+    parser.add_argument('--seed', type=int, default=2022, help='random seed')
     # Data Splits
     parser.add_argument("--train", default='train')
     parser.add_argument("--valid", default='valid')

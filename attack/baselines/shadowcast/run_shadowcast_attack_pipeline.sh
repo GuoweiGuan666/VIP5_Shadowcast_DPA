@@ -29,7 +29,7 @@ TARGET_ITEM=$2
 POPULAR_ITEM=$3
 MR=$4
 EPSILON=$5
-SEED=${6:-42}
+SEED=${6:-2022}
 
 # normalize malicious ratio to match Python's str(float()) output
 MR_STR=$(python - "$MR" <<'EOF'

@@ -86,7 +86,7 @@ python attack/baselines/DirectBoost_Random_Popular_attack/poison_exp_splits.py \
   --features "['design','quality','value']" \
   --explanations '["Excellent build!","Feels premium.","Very comfortable."]' \
   --review-texts '["Great build!","Feels premium.","Very comfortable."]' \
-  --seed 42
+  --seed 2022
 
 # 4) 构建虚假用户映射
 echo "[4/7] 构建虚假用户映射"

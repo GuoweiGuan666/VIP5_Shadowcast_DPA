@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--item2img-poisoned-path", required=True)
     p.add_argument("--pop-top-n", type=int, default=10,
                    help="number of popular items to aggregate reviews from")
-    p.add_argument("--seed", type=int, default=42,
+    p.add_argument("--seed", type=int, default=2022,
                    help="random seed")
     return p.parse_args()
 

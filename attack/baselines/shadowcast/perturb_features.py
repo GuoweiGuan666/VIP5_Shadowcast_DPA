@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument("--epsilon", type=float, default=0.01)
     parser.add_argument("--mr", type=float, default=1.0)
     parser.add_argument("--datamaps-path", type=str, required=True)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=2022)
     return parser.parse_args()
 
 
