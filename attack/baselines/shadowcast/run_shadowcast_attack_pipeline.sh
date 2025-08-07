@@ -61,16 +61,17 @@ esac
 
 # avoid unbound variable errors when environment variables are not exported
 MODEL_PATH=${MODEL_PATH:-}
+if [ -z "$MODEL_PATH" ]; then
+  echo "[ERROR] MODEL_PATH environment variable must point to a pretrained VIP5 checkpoint"
+  exit 1
+fi
+echo "Using model path: $MODEL_PATH"
 BACKBONE=${BACKBONE:-t5-base}
 ATTACK_TYPE=${ATTACK_TYPE:-fgsm}
 PGD_STEPS=${PGD_STEPS:-10}
 PGD_ALPHA=${PGD_ALPHA:-0.001}
 DEVICE=${DEVICE:-cuda}
-if [ -n "$MODEL_PATH" ]; then
-  echo "Using model path: $MODEL_PATH"
-else
-  echo "[INFO] MODEL_PATH not set; training scripts should specify --load."
-fi
+
 # NOTE: All attacks should start from the same VIP5 pretrained checkpoint.
 # This script only prepares poisoned data and does not load any fine‑tuned
 # model. Training should later be launched with scripts/run_finetune.sh and
@@ -143,7 +144,8 @@ fi
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
-python "$SCRIPT_DIR/perturb_features.py" \
+perturb_cmd=(
+  python "$SCRIPT_DIR/perturb_features.py" \
   --dataset "$DATASET" \
   --targeted-item-id "$TARGET_ITEM" \
   --popular-item-id  "$POPULAR_ITEM" \
@@ -153,12 +155,16 @@ python "$SCRIPT_DIR/perturb_features.py" \
   --mr              "$MR" \
   --datamaps-path   "$DATA_ROOT/datamaps.json" \
   --seed            "$SEED" \
-  --pretrained-model "$MODEL_PATH" \
   --backbone "$BACKBONE" \
   --attack-type "$ATTACK_TYPE" \
   --pgd-steps "$PGD_STEPS" \
   --pgd-alpha "$PGD_ALPHA" \
   --device "$DEVICE"
+  )
+if [ -n "$MODEL_PATH" ]; then
+  perturb_cmd+=(--pretrained-model "$MODEL_PATH")
+fi
+"${perturb_cmd[@]}"
 
 # set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"

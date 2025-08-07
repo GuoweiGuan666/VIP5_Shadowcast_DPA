@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--mr", type=float, default=1.0)
     parser.add_argument("--datamaps-path", type=str, required=True)
     parser.add_argument("--seed", type=int, default=2022)
-    parser.add_argument("--pretrained-model", type=str, required=True)
+    parser.add_argument("--pretrained-model", type=str, required=False)
     parser.add_argument("--backbone", type=str, required=True)
     parser.add_argument("--attack-type", type=str, choices=["fgsm", "pgd"], default="fgsm")
     parser.add_argument("--pgd-steps", type=int, default=3)
@@ -80,6 +80,21 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
+    if not args.pretrained_model:
+        raise ValueError(
+            "--pretrained-model must be provided and point to a directory or HuggingFace model ID"
+        )
+
+    if not os.path.isdir(args.pretrained_model):
+        try:
+            from huggingface_hub import model_info
+
+            model_info(args.pretrained_model)
+        except Exception as e:
+            raise ValueError(
+                f"--pretrained-model '{args.pretrained_model}' is not a directory or valid HuggingFace model ID"
+            ) from e
 
     device = torch.device(args.device)
     config = T5Config.from_pretrained(args.backbone)
