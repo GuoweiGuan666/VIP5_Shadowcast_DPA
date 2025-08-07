@@ -18,7 +18,15 @@ set -euo pipefail
 
 
 usage() {
-  echo "Usage: $0 <dataset-name> <targeted-item-id> <popular-item-id> <mr> <epsilon>"
+  echo "Usage: $0 <dataset-name> <targeted-item-id> <popular-item-id> <mr> <epsilon> [seed]"
+  echo ""
+  echo "Optional environment variables:"
+  echo "  MODEL_PATH   Path to pretrained VIP5 checkpoint"
+  echo "  BACKBONE     T5 backbone to use (default: t5-base)"
+  echo "  ATTACK_TYPE  Attack type fgsm or pgd (default: fgsm)"
+  echo "  PGD_STEPS    Steps for PGD attack (default: 10)"
+  echo "  PGD_ALPHA    Step size for PGD attack (default: 0.001)"
+  echo "  DEVICE       Torch device (default: cuda)"
   exit 1
 }
 
@@ -51,8 +59,13 @@ case "$DATASET" in
     ;;
 esac
 
-# avoid unbound variable errors when MODEL_PATH is not exported
+# avoid unbound variable errors when environment variables are not exported
 MODEL_PATH=${MODEL_PATH:-}
+BACKBONE=${BACKBONE:-t5-base}
+ATTACK_TYPE=${ATTACK_TYPE:-fgsm}
+PGD_STEPS=${PGD_STEPS:-10}
+PGD_ALPHA=${PGD_ALPHA:-0.001}
+DEVICE=${DEVICE:-cuda}
 if [ -n "$MODEL_PATH" ]; then
   echo "Using model path: $MODEL_PATH"
 else
@@ -139,7 +152,13 @@ python "$SCRIPT_DIR/perturb_features.py" \
   --epsilon         "$EPSILON" \
   --mr              "$MR" \
   --datamaps-path   "$DATA_ROOT/datamaps.json" \
-  --seed            "$SEED"
+  --seed            "$SEED" \
+  --pretrained-model "$MODEL_PATH" \
+  --backbone "$BACKBONE" \
+  --attack-type "$ATTACK_TYPE" \
+  --pgd-steps "$PGD_STEPS" \
+  --pgd-alpha "$PGD_ALPHA" \
+  --device "$DEVICE"
 
 # set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
