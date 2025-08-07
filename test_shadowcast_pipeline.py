@@ -3,11 +3,15 @@ import sys
 import json
 import pickle
 import tempfile
-import numpy as np
+
+import pytest
+
 
 def test_feature_perturbation():
-    from attack.baselines.shadowcast.perturb_features import load_embeddings, save_embeddings, to_tensor
-    from attack.baselines.shadowcast.perturb_features import main as perturb_main
+    pytest.importorskip("torch")
+    pytest.importorskip("numpy")
+    import numpy as np
+    from attack.baselines.shadowcast.perturb_features import load_embeddings, save_embeddings
     # Create dummy embeddings
     tmp_dir = tempfile.mkdtemp()
     emb_path = os.path.join(tmp_dir, 'item2img_dict.pkl')
@@ -31,6 +35,9 @@ def test_feature_perturbation():
 
 
 def test_fake_user():
+    pytest.importorskip("torch")
+    pytest.importorskip("numpy")
+    import numpy as np
     from attack.baselines.shadowcast.fake_user_generator import generate_fake_users
     # Create dummy poisoned embeddings file
     tmp_dir = tempfile.mkdtemp()
@@ -70,30 +77,11 @@ def test_check_embeddings_path_dict():
     data_root = os.path.join(tmp_dir, 'data')
     feat_root = os.path.join(tmp_dir, 'features')
     os.makedirs(os.path.join(data_root, 'test', 'poisoned'), exist_ok=True)
-    os.makedirs(os.path.join(feat_root, 'test'), exist_ok=True)
-    # 原始特征向量
-    np.save(os.path.join(feat_root, 'test', 'targ.npy'), np.array([1.0, 0.0]))
-    np.save(os.path.join(feat_root, 'test', 'pop.npy'), np.array([0.0, 1.0]))
-    # item2img_dict 中仅保存图片路径
-    mapping = {'targ': 'path/to/targ.jpg', 'pop': 'path/to/pop.jpg'}
-    with open(os.path.join(data_root, 'test', 'item2img_dict.pkl'), 'wb') as f:
-        pickle.dump(mapping, f)
-    with open(os.path.join(data_root, 'test', 'poisoned', 'item2img_dict_shadowcast_mr0.pkl'), 'wb') as f:
-        pickle.dump(mapping, f)
-    # 调用检查函数，若未抛出异常则说明通过
-    check_embeddings('test', 'targ', 'pop', 0, data_root, feat_root)
-
-def test_check_embeddings_path_dict():
-    """确保当 item2img_dict 仅包含图片路径时，检查函数也能正常工作。"""
-    from attack.baselines.shadowcast.check_shadowcast_poisoning import check_embeddings
-    tmp_dir = tempfile.mkdtemp()
-    data_root = os.path.join(tmp_dir, 'data')
-    feat_root = os.path.join(tmp_dir, 'features')
-    os.makedirs(os.path.join(data_root, 'test', 'poisoned'), exist_ok=True)
-    os.makedirs(os.path.join(feat_root, 'test'), exist_ok=True)
-    # 原始特征向量
-    np.save(os.path.join(feat_root, 'test', 'targ.npy'), np.array([1.0, 0.0]))
-    np.save(os.path.join(feat_root, 'test', 'pop.npy'), np.array([0.0, 1.0]))
+    # 将原始特征向量写入单个 pkl 文件以避免依赖 numpy
+    orig_feat_path = os.path.join(feat_root, 'test')
+    os.makedirs(feat_root, exist_ok=True)
+    with open(orig_feat_path, 'wb') as f:
+        pickle.dump({'targ': [1.0, 0.0], 'pop': [0.0, 1.0]}, f)
     # item2img_dict 中仅保存图片路径
     mapping = {'targ': 'path/to/targ.jpg', 'pop': 'path/to/pop.jpg'}
     with open(os.path.join(data_root, 'test', 'item2img_dict.pkl'), 'wb') as f:

@@ -14,7 +14,11 @@ import shutil
 import pickle
 import subprocess
 import sys
+import importlib.util
 from pathlib import Path
+
+HAS_TORCH = importlib.util.find_spec("torch") is not None
+
 
 class TestPoisonExpSplitsCLI(unittest.TestCase):
     def setUp(self):
@@ -33,6 +37,7 @@ class TestPoisonExpSplitsCLI(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
+    @unittest.skipUnless(HAS_TORCH, "requires torch")
     def test_poison_exp_splits_output(self):
         cmd = [
             sys.executable, str(self.script),
