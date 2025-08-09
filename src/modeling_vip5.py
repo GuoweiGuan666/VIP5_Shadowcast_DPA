@@ -987,7 +987,6 @@ class VIP5(T5ForConditionalGeneration):
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         
         if config.use_lm_head_adapter:
-            self.output_adapter = OutputParallelAdapterLayer(config, self.model.shared.num_embeddings)
             # ``self.shared`` holds the embedding matrix created above. The
             # original implementation attempted to access ``self.model.shared``
             # which does not exist in this class and caused an AttributeError
