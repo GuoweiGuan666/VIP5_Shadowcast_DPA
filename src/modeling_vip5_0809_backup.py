@@ -988,17 +988,6 @@ class VIP5(T5ForConditionalGeneration):
         
         if config.use_lm_head_adapter:
             self.output_adapter = OutputParallelAdapterLayer(config, self.model.shared.num_embeddings)
-            # ``self.shared`` holds the embedding matrix created above. The
-            # original implementation attempted to access ``self.model.shared``
-            # which does not exist in this class and caused an AttributeError
-            # during model initialisation. Using ``self.shared`` ensures the
-            # adapter receives the correct vocabulary size without depending on
-            # an undefined ``self.model`` attribute, allowing both the attack
-            # pipeline and fine‑tuning scripts to construct the model
-            # successfully.
-            self.output_adapter = OutputParallelAdapterLayer(
-                config, self.shared.num_embeddings
-            )
             
         adapter_config = config.adapter_config
         
