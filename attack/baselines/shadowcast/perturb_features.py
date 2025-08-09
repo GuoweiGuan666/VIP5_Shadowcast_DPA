@@ -124,7 +124,14 @@ def main():
 
     config.use_adapter = True
     config.add_adapter_cross_attn = True
-    config.use_lm_head_adapter = True
+    # The pretrained checkpoints used by the ShadowCast attack pipeline were
+    # generated without a language-model head adapter.  Enabling the adapter
+    # here causes `model.load_state_dict` to expect additional parameters like
+    # ``output_adapter.adapter.down_sampler.weight`` which are absent from the
+    # checkpoint and lead to a ``Missing key(s)`` runtime error.  Explicitly
+    # disable it to keep the configuration in sync with the available
+    # checkpoints.
+    config.use_lm_head_adapter = False
     config.use_single_adapter = True
     config.unfreeze_layer_norms = False
     config.unfreeze_language_model = False
