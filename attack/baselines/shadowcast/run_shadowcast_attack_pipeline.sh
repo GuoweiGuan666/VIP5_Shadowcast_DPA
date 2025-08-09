@@ -166,6 +166,16 @@ if [ -n "$MODEL_PATH" ]; then
 fi
 "${perturb_cmd[@]}"
 
+# Optionally inspect how much the target embedding changed.  This prints the
+# L2 distance and cosine similarity between the original CLIP feature and the
+# poisoned one for each targeted item.  It serves as a quick sanity check that
+# ``perturb_features.py`` actually modified the embedding.
+python "$SCRIPT_DIR/inspect_embedding_drift.py" \
+  --targeted-item-id "$TARGET_ITEM" \
+  --feat-dir "$FEAT_DIR" \
+  --poisoned-pkl "$POISON_DIR/item2img_dict_shadowcast_mr${MR_STR}.pkl"
+
+
 # set paths
 SEQ_FILE="${DATA_ROOT}/sequential_data.txt"
 REVIEW_SPLITS="${DATA_ROOT}/review_splits.pkl"

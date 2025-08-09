@@ -120,6 +120,29 @@ def test_check_mappings_no_poison_files():
     # 若函数未抛出异常，则说明检查通过
     check_mappings(dataset, 0, 1, 0, orig_lines, data_root)
 
+def test_inspect_embedding_drift():
+    """调用检查脚本，确认能输出目标特征的差异。"""
+    pytest.importorskip("numpy")
+    import numpy as np
+    tmp_dir = tempfile.mkdtemp()
+    feat_dir = os.path.join(tmp_dir, "feat")
+    os.makedirs(feat_dir, exist_ok=True)
+    np.save(os.path.join(feat_dir, "item.npy"), np.array([1.0, 0.0, 0.0], dtype=np.float32))
+    pois_path = os.path.join(tmp_dir, "pois.pkl")
+    with open(pois_path, "wb") as f:
+        pickle.dump({"item": np.array([0.0, 1.0, 0.0])}, f)
+    sys.argv = [
+        "inspect_embedding_drift.py",
+        "--targeted-item-id",
+        "item",
+        "--feat-dir",
+        feat_dir,
+        "--poisoned-pkl",
+        pois_path,
+    ]
+    from attack.baselines.shadowcast.inspect_embedding_drift import main
+
+    main()
 
 def main():
     print("[*] 测试 FGSM 特征扰动...")
