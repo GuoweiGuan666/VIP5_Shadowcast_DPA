@@ -9,18 +9,26 @@ import torch
 import torch.nn.functional as F
 from transformers import T5Config
 
-# The VIP5 model extends the standard ``T5Config`` with a number of
-# additional attributes (e.g. ``use_adapter``, ``feat_dim``) that are not
-# present in the vanilla HuggingFace implementation.  During training these
-# fields are injected via ``TrainerBase.create_config``.  The ShadowCast
-# attack pipeline loads a checkpoint directly and therefore needs to mimic
-# that setup manually; otherwise accessing attributes such as
-# ``config.use_adapter`` results in an ``AttributeError`` when building the
-# model.
-from adapters import AdapterConfig
-
 import sys
+
+# Ensure local modules under ``src`` (including the custom ``adapters``
+# package) are discoverable before importing them.  Previously the path was
+# appended *after* attempting ``from adapters import AdapterConfig``, which
+# meant Python could not locate the module and the script crashed with
+# ``ModuleNotFoundError: No module named 'adapters'`` when executed via the
+# ShadowCast attack pipeline.
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../..", "src"))
+
+
+# The VIP5 model extends the standard ``T5Config`` with a number of additional
+# attributes (e.g. ``use_adapter``, ``feat_dim``) that are not present in the
+# vanilla HuggingFace implementation.  During training these fields are
+# injected via ``TrainerBase.create_config``.  The ShadowCast attack pipeline
+# loads a checkpoint directly and therefore needs to mimic that setup
+# manually; otherwise accessing attributes such as ``config.use_adapter``
+# results in an ``AttributeError`` when building the model.
+from adapters import AdapterConfig
 from model import VIP5Tuning
 
 
