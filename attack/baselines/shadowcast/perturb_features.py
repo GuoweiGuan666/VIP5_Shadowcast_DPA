@@ -49,7 +49,7 @@ def parse_args():
         default="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0805/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth",
     )
     parser.add_argument("--backbone", type=str, default="t5-small")
-    parser.add_argument("--attack-type", type=str, choices=["fgsm", "pgd"], default="fgsm")
+    parser.add_argument("--attack-type", type=str, choices=["fgsm", "pgd"], default="pgd")
     parser.add_argument("--pgd-steps", type=int, default=3)
     parser.add_argument("--pgd-alpha", type=float, default=0.01)
     parser.add_argument(
