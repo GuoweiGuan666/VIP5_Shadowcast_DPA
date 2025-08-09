@@ -132,6 +132,15 @@ def main():
     config.attention_dropout = 0.1
     config.activation_dropout = 0.1
 
+    # The adapter implementation expects a ``non_linearity`` attribute on the
+    # main config, mirroring the behaviour during training.  Standard
+    # ``T5Config`` instances from HuggingFace do not define this field, which
+    # results in ``AttributeError: 'T5Config' object has no attribute
+    # 'non_linearity'`` when constructing the model for the attack pipeline.
+    # Setting it explicitly ensures the adapters initialise correctly without
+    # modifying the fine‑tuning codebase.
+    config.non_linearity = "gelu_new"
+
     config.losses = "sequential,direct,explanation"
 
     if config.use_adapter:
