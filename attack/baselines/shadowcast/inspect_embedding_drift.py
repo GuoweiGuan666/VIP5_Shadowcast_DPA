@@ -44,10 +44,17 @@ def main() -> None:
         if tid not in pois:
             print(f"[WARN] {tid} not found in poisoned file")
             continue
-        orig = load_original(args.feat_dir, tid)
-        pois_vec = np.asarray(pois[tid])
+        # Both the original ``.npy`` feature files and the poisoned
+        # ``item2img_dict`` may store vectors with an extra leading
+        # dimension, e.g. ``(1, 512)``.  Squeeze them to ensure we operate
+        # on flat 1-D arrays before computing drift metrics.
+        orig = np.squeeze(load_original(args.feat_dir, tid))
+        pois_vec = np.squeeze(np.asarray(pois[tid]))
+
         l2 = np.linalg.norm(pois_vec - orig)
-        cos = np.dot(pois_vec, orig) / (np.linalg.norm(pois_vec) * np.linalg.norm(orig) + 1e-12)
+        cos = np.dot(pois_vec, orig) / (
+            np.linalg.norm(pois_vec) * np.linalg.norm(orig) + 1e-12
+        )
         print(f"[EMB] {tid}: L2 diff={l2:.6f}, cosine={cos:.6f}")
 
 
