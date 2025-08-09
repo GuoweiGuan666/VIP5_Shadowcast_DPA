@@ -48,7 +48,7 @@ def parse_args():
         type=str,
         default="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0805/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth",
     )
-    parser.add_argument("--backbone", type=str, required=True)
+    parser.add_argument("--backbone", type=str, default="t5-small")
     parser.add_argument("--attack-type", type=str, choices=["fgsm", "pgd"], default="fgsm")
     parser.add_argument("--pgd-steps", type=int, default=3)
     parser.add_argument("--pgd-alpha", type=float, default=0.01)
@@ -105,6 +105,8 @@ def main():
 
     device = torch.device(args.device)
     config = T5Config.from_pretrained(args.backbone)
+    # Ensure embedding dimensions match the pretrained checkpoint
+    config.vocab_size = 32100
 
     # ------------------------------------------------------------------
     # VIP5-specific configuration
@@ -156,11 +158,14 @@ def main():
         state_dict = torch.load(args.pretrained_model, map_location=device)
         model = VIP5Tuning(config=config).to(device)
         model.load_state_dict(state_dict)
+        model.resize_token_embeddings(32100)
     elif os.path.isdir(args.pretrained_model):
         model = VIP5Tuning.from_pretrained(args.pretrained_model, config=config).to(device)
+        model.resize_token_embeddings(32100)
     else:
         try:
             model = VIP5Tuning.from_pretrained(args.pretrained_model, config=config).to(device)
+            model.resize_token_embeddings(32100)
         except Exception as e:
             raise ValueError(
                 f"--pretrained-model '{args.pretrained_model}' is not a file, directory or valid HuggingFace model ID"

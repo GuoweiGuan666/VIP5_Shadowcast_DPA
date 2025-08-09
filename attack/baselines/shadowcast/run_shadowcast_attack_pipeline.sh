@@ -22,7 +22,7 @@ usage() {
   echo ""
   echo "Optional environment variables:"
   echo "  MODEL_PATH   Path to pretrained VIP5 checkpoint"
-  echo "  BACKBONE     T5 backbone to use (default: t5-base)"
+  echo "  BACKBONE     T5 backbone to use (default: t5-small)"
   echo "  ATTACK_TYPE  Attack type fgsm or pgd (default: fgsm)"
   echo "  PGD_STEPS    Steps for PGD attack (default: 10)"
   echo "  PGD_ALPHA    Step size for PGD attack (default: 0.001)"
@@ -66,7 +66,7 @@ if [ "$MODEL_PATH" = "$DEFAULT_MODEL_PATH" ]; then
   echo "[WARN] MODEL_PATH not set; defaulting to $MODEL_PATH"
 fi
 echo "Using model path: $MODEL_PATH"
-BACKBONE=${BACKBONE:-t5-base}
+BACKBONE=${BACKBONE:-t5-small}
 ATTACK_TYPE=${ATTACK_TYPE:-fgsm}
 PGD_STEPS=${PGD_STEPS:-10}
 PGD_ALPHA=${PGD_ALPHA:-0.001}
