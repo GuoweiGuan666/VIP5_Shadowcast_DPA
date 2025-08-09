@@ -59,11 +59,11 @@ case "$DATASET" in
     ;;
 esac
 
-# avoid unbound variable errors when environment variables are not exported
-MODEL_PATH=${MODEL_PATH:-}
-if [ -z "$MODEL_PATH" ]; then
-  echo "[ERROR] MODEL_PATH environment variable must point to a pretrained VIP5 checkpoint"
-  exit 1
+# Use a sensible default checkpoint if MODEL_PATH is unset.
+DEFAULT_MODEL_PATH="/scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/snap/beauty/0805/NoAttack_0.0_beauty-vitb32-2-8-20/BEST_EVAL_LOSS.pth"
+MODEL_PATH="${MODEL_PATH:-$DEFAULT_MODEL_PATH}"
+if [ "$MODEL_PATH" = "$DEFAULT_MODEL_PATH" ]; then
+  echo "[WARN] MODEL_PATH not set; defaulting to $MODEL_PATH"
 fi
 echo "Using model path: $MODEL_PATH"
 BACKBONE=${BACKBONE:-t5-base}
