@@ -9,6 +9,16 @@ import torch
 import torch.nn.functional as F
 from transformers import T5Config
 
+# The VIP5 model extends the standard ``T5Config`` with a number of
+# additional attributes (e.g. ``use_adapter``, ``feat_dim``) that are not
+# present in the vanilla HuggingFace implementation.  During training these
+# fields are injected via ``TrainerBase.create_config``.  The ShadowCast
+# attack pipeline loads a checkpoint directly and therefore needs to mimic
+# that setup manually; otherwise accessing attributes such as
+# ``config.use_adapter`` results in an ``AttributeError`` when building the
+# model.
+from adapters import AdapterConfig
+
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../..", "src"))
 from model import VIP5Tuning
@@ -87,6 +97,44 @@ def main():
 
     device = torch.device(args.device)
     config = T5Config.from_pretrained(args.backbone)
+
+    # ------------------------------------------------------------------
+    # VIP5-specific configuration
+    # ------------------------------------------------------------------
+    # ``TrainerBase.create_config`` (used during training) augments the
+    # configuration with a number of custom attributes.  When loading a
+    # checkpoint directly for inference those fields are missing, which
+    # causes ``AttributeError`` when the model accesses e.g. ``use_adapter``.
+    # Here we replicate the minimal setup required for the pretrained
+    # checkpoints used in the ShadowCast pipeline.
+    config.feat_dim = 512  # CLIP-ViT-B/32 feature dimension
+    config.n_vis_tokens = 2  # image_feature_size_ratio
+    config.use_vis_layer_norm = True
+    config.reduction_factor = 8
+
+    config.use_adapter = True
+    config.add_adapter_cross_attn = True
+    config.use_lm_head_adapter = True
+    config.use_single_adapter = True
+    config.unfreeze_layer_norms = False
+    config.unfreeze_language_model = False
+
+    config.dropout_rate = 0.1
+    config.dropout = 0.1
+    config.attention_dropout = 0.1
+    config.activation_dropout = 0.1
+
+    config.losses = "sequential,direct,explanation"
+
+    if config.use_adapter:
+        config.adapter_config = AdapterConfig()
+        config.adapter_config.tasks = ["sequential", "direct", "explanation"]
+        config.adapter_config.d_model = config.d_model
+        config.adapter_config.use_single_adapter = config.use_single_adapter
+        config.adapter_config.reduction_factor = config.reduction_factor
+        config.adapter_config.track_z = False
+    else:
+        config.adapter_config = None
     if os.path.isfile(args.pretrained_model):
         state_dict = torch.load(args.pretrained_model, map_location=device)
         model = VIP5Tuning(config=config).to(device)
