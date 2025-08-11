@@ -57,6 +57,11 @@ def parse_args():
         type=str,
         default="cuda" if torch.cuda.is_available() else "cpu",
     )
+    parser.add_argument(
+        "--disable-perturb",
+        action="store_true",
+        help="copy features without running adversarial perturbation",
+    )
     return parser.parse_args()
 
 
@@ -98,6 +103,20 @@ def to_tensor(arr):
 
 def main():
     args = parse_args()
+
+    if args.disable_perturb:
+        item2img = load_embeddings(args.item2img_path)
+        if item2img:
+            ref_vec = next(iter(item2img.values()))
+        else:
+            ref_vec = np.zeros(512, dtype=np.float32)
+        if args.targeted_item_id not in item2img:
+            item2img[args.targeted_item_id] = np.zeros_like(ref_vec)
+        if args.popular_item_id not in item2img:
+            item2img[args.popular_item_id] = np.zeros_like(ref_vec)
+        save_embeddings(item2img, args.output_path)
+        print(f"Perturbation disabled; copied embeddings to {args.output_path}")
+        return
 
     random.seed(args.seed)
     np.random.seed(args.seed)

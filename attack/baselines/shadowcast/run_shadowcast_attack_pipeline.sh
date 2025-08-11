@@ -15,18 +15,22 @@ set -euo pipefail
 # Toys
 #./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
 
+# Disable feature perturbation
+# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01 2022 --no-img-perturb
+
 
 
 usage() {
-  echo "Usage: $0 <dataset-name> <targeted-item-id> <popular-item-id> <mr> <epsilon> [seed]"
+  echo "Usage: $0 <dataset-name> <targeted-item-id> <popular-item-id> <mr> <epsilon> [seed] [--no-img-perturb]"
   echo ""
   echo "Optional environment variables:"
-  echo "  MODEL_PATH   Path to pretrained VIP5 checkpoint"
-  echo "  BACKBONE     T5 backbone to use (default: t5-small)"
-  echo "  ATTACK_TYPE  Attack type fgsm or pgd (default: fgsm)"
-  echo "  PGD_STEPS    Steps for PGD attack (default: 10)"
-  echo "  PGD_ALPHA    Step size for PGD attack (default: 0.001)"
-  echo "  DEVICE       Torch device (default: cuda)"
+  echo "  MODEL_PATH       Path to pretrained VIP5 checkpoint"
+  echo "  BACKBONE         T5 backbone to use (default: t5-small)"
+  echo "  ATTACK_TYPE      Attack type fgsm or pgd (default: fgsm)"
+  echo "  PGD_STEPS        Steps for PGD attack (default: 10)"
+  echo "  PGD_ALPHA        Step size for PGD attack (default: 0.001)"
+  echo "  DEVICE           Torch device (default: cuda)"
+  echo "  NO_IMG_PERTURB   Set to 1 to skip image feature perturbation"
   exit 1
 }
 
@@ -38,6 +42,15 @@ POPULAR_ITEM=$3
 MR=$4
 EPSILON=$5
 SEED=${6:-2022}
+
+NO_IMG_PERTURB_FLAG=${NO_IMG_PERTURB:-}
+if [ "${7:-}" = "--no-img-perturb" ]; then
+  NO_IMG_PERTURB=true
+elif [ "$NO_IMG_PERTURB_FLAG" = "1" ] || [ "$NO_IMG_PERTURB_FLAG" = "true" ]; then
+  NO_IMG_PERTURB=true
+else
+  NO_IMG_PERTURB=false
+fi
 
 # normalize malicious ratio to match Python's str(float()) output
 MR_STR=$(python - "$MR" <<'EOF'
@@ -144,6 +157,9 @@ fi
 
 # 1) feature perturbation
 echo "[1/4] 生成对抗扰动特征 (ShadowCast)"
+if [ "$NO_IMG_PERTURB" = true ]; then
+  echo "[INFO] 图像特征扰动已禁用"
+fi
 perturb_cmd=(
   python "$SCRIPT_DIR/perturb_features.py" \
   --dataset "$DATASET" \
@@ -161,6 +177,10 @@ perturb_cmd=(
   --pgd-alpha "$PGD_ALPHA" \
   --device "$DEVICE"
   )
+if [ "$NO_IMG_PERTURB" = true ]; then
+  perturb_cmd+=(--disable-perturb)
+fi
+  
 if [ -n "$MODEL_PATH" ]; then
   perturb_cmd+=(--pretrained-model "$MODEL_PATH")
 fi

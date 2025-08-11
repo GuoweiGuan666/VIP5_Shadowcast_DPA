@@ -16,6 +16,10 @@
 # Toys
 ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh toys  B000P6Q7ME  B004S8F7QM  0.1 0.01
 
+# 若需禁用图像特征扰动，在命令末尾添加 ``--no-img-perturb`` 或设置环境变量 ``NO_IMG_PERTURB=1``。
+# 例如：
+# ./attack/baselines/shadowcast/run_shadowcast_attack_pipeline.sh beauty B004ZT0SSG B004OHQR1Q 0.1 0.01 2022 --no-img-perturb
+
 
 
 
@@ -28,6 +32,14 @@ python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
     --mr 0.1\
+    --feat-root features/vitb32_features
+
+    
+python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+    --dataset clothing \
+    --targeted-asin B001LK3DAW \
+    --popular-asin B005LERHD8 \
+    --mr 0.1 \
     --feat-root features/vitb32_features
 
 
