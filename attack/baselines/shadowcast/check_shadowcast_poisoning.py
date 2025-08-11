@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """check_shadowcast_poisoning.py
 
-Verify ShadowCast poisoning artifacts for a dataset.
+Verify ShadowCast poisoning artifacts for a dataset (``beauty``,
+``clothing``, ``sports`` or ``toys``).
 
 This script should be run from the repository root.  It expects the
 dataset files to live under ``data/<dataset>`` with poisoned artifacts in
@@ -11,10 +12,19 @@ dataset files to live under ``data/<dataset>`` with poisoned artifacts in
 Example usage::
 
 cd /path/to/VIP5_Shadowcast_DPA
+
 python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
     --dataset beauty \
     --targeted-asin B004ZT0SSG \
     --popular-asin B004OHQR1Q \
+    --mr 0.1\
+    --feat-root features/vitb32_features
+
+
+python attack/baselines/shadowcast/check_shadowcast_poisoning.py \
+    --dataset clothing \
+    --targeted-asin B001LK3DAW \
+    --popular-asin B005LERHD8 \
     --mr 0.1 \
     --feat-root features/vitb32_features
 
