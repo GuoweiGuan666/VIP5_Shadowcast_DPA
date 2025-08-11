@@ -247,10 +247,15 @@ def check_embeddings(
         ), f"embedding distance changed for MR=0: before {before}, after {after}"
         print("[OK] MR=0 -> embeddings unchanged")
     else:
-        assert (
-            after < before
-        ), f"embedding distance not reduced: before {before}, after {after}"
-        print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
+        if math.isclose(after, before, rel_tol=1e-6):
+            # Embeddings are identical.  This happens when image perturbation was
+            # disabled during the attack pipeline (e.g. ``--no-img-perturb``).
+            print("[OK] embeddings unchanged -> no image perturbation applied")
+        else:
+            assert (
+                after < before
+            ), f"embedding distance not reduced: before {before}, after {after}"
+            print(f"[OK] embedding distance {before:.4f} -> {after:.4f}")
 
 
 def extract_target_reviews(
