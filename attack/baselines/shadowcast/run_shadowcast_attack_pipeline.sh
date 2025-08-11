@@ -26,9 +26,9 @@ usage() {
   echo "Optional environment variables:"
   echo "  MODEL_PATH       Path to pretrained VIP5 checkpoint"
   echo "  BACKBONE         T5 backbone to use (default: t5-small)"
-  echo "  ATTACK_TYPE      Attack type fgsm or pgd (default: fgsm)"
-  echo "  PGD_STEPS        Steps for PGD attack (default: 10)"
-  echo "  PGD_ALPHA        Step size for PGD attack (default: 0.001)"
+  echo "  ATTACK_TYPE      Attack type fgsm or pgd (default: pgd)"
+  echo "  PGD_STEPS        Steps for PGD attack (default: 2000)"
+  echo "  PGD_ALPHA        Step size for PGD attack (default: 0.2/255)"
   echo "  DEVICE           Torch device (default: cuda)"
   echo "  NO_IMG_PERTURB   Set to 1 to skip image feature perturbation"
   exit 1
@@ -80,9 +80,13 @@ if [ "$MODEL_PATH" = "$DEFAULT_MODEL_PATH" ]; then
 fi
 echo "Using model path: $MODEL_PATH"
 BACKBONE=${BACKBONE:-t5-small}
-ATTACK_TYPE=${ATTACK_TYPE:-fgsm}
-PGD_STEPS=${PGD_STEPS:-10}
-PGD_ALPHA=${PGD_ALPHA:-0.001}
+ATTACK_TYPE=${ATTACK_TYPE:-pgd}
+PGD_STEPS=${PGD_STEPS:-2000}
+# Default PGD step size corresponds to 0.2/255
+PGD_ALPHA=${PGD_ALPHA:-$(python - <<'EOF'
+print(0.2/255)
+EOF
+)}
 DEVICE=${DEVICE:-cuda}
 
 # NOTE: All attacks should start from the same VIP5 pretrained checkpoint.

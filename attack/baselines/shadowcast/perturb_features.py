@@ -39,7 +39,7 @@ def parse_args():
     parser.add_argument("--popular-item-id", type=str, required=True)
     parser.add_argument("--item2img-path", type=str, required=True)
     parser.add_argument("--output-path", type=str, required=True)
-    parser.add_argument("--epsilon", type=float, default=0.01)
+    parser.add_argument("--epsilon", type=float, default=8 / 255)
     parser.add_argument("--mr", type=float, default=1.0)
     parser.add_argument("--datamaps-path", type=str, required=True)
     parser.add_argument("--seed", type=int, default=2022)
@@ -50,8 +50,8 @@ def parse_args():
     )
     parser.add_argument("--backbone", type=str, default="t5-small")
     parser.add_argument("--attack-type", type=str, choices=["fgsm", "pgd"], default="pgd")
-    parser.add_argument("--pgd-steps", type=int, default=3)
-    parser.add_argument("--pgd-alpha", type=float, default=0.01)
+    parser.add_argument("--pgd-steps", type=int, default=2000)
+    parser.add_argument("--pgd-alpha", type=float, default=0.2 / 255)
     parser.add_argument(
         "--device",
         type=str,
@@ -263,12 +263,13 @@ def main():
             x = torch.clamp(x, feat_min, feat_max)
         else:
             x_adv = x.clone()
-            for _ in range(args.pgd_steps):
+            for i in range(args.pgd_steps):
                 x_adv.requires_grad_(True)
                 loss = F.mse_loss(model.encoder.visual_embedding(x_adv), y_embed)
                 loss.backward()
                 grad = x_adv.grad
-                x_adv = x_adv - args.pgd_alpha * grad.sign()
+                step = args.pgd_alpha if i < 1000 else 0.1 / 255
+                x_adv = x_adv - step * grad.sign()
                 eta = torch.clamp(x_adv - x_orig, -args.epsilon, args.epsilon)
                 x_adv = torch.clamp(x_orig + eta, feat_min, feat_max).detach()
             x = x_adv
