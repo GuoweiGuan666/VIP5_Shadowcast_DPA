@@ -108,18 +108,18 @@ class VIP5_Dataset(Dataset):
         if atk_snake == "no":
             atk_snake = "noattack"
 
-        # —— alias 映射：把各种命名规范统一到数据文件夹使用的名称
-        alias_map = {
-            "direct_boosting": "direct_boost",
-            "popular_item_mimicking": "popular_mimicking",
-            "shadow_cast": "shadowcast",
-            "shadowcast": "shadowcast",
-            # 新增攻击 dcip_ieos，保持名称不变但记录日志
-            "dcip_ieos": "dcip_ieos",
-        }
-        normalized = alias_map.get(atk_snake, atk_snake)
-        print(f"[VIP5_Dataset] normalized attack_mode: {atk_snake} -> {normalized}")
-        atk_snake = normalized
+        # —— alias 映射：脚本里用 DirectBoostingAttack，但文件夹里是 direct_boost
+        # ↓ 加入别名映射
+        if atk_snake == "direct_boosting":
+            atk_snake = "direct_boost"
+
+        # PopularItemMimickingAttack  →  popular_mimicking
+        if atk_snake == "popular_item_mimicking":
+            atk_snake = "popular_mimicking"
+
+        # ShadowCastAttack → shadowcast
+        if atk_snake in ("shadow_cast", "shadowcast"):
+            atk_snake = "shadowcast"
 
 
         # 数字 MR 转字符串
