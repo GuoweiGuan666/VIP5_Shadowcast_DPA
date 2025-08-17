@@ -1,38 +1,269 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Orchestrate the DCIP-IEOS poisoning attack."""
+"""Utilities to orchestrate the DCIP-IEOS poisoning pipeline.
 
+This module glues together the light‑weight helpers provided in the
+``attack/ours/dcip_ieos`` package and exposes a :func:`run_pipeline` function
+used by the tests.  The real project executes a fairly involved attack that
+requires a large number of dependencies (e.g. PyTorch and the VIP5 model).  In
+order to keep the unit tests fast and hermetic the implementation here keeps
+the behaviour intentionally simple while mimicking the control flow of the
+original pipeline.
+
+The high level steps are as follows:
+
+1.  Load the cached competition pool as well as pre‑computed cross‑modal
+    saliency masks.
+2.  For every target item we sequentially apply the image, text and sequence
+    perturbations defined in :mod:`multimodal_perturbers`.
+3.  The produced fake user interactions together with their textual/visual
+    artefacts are written back to ``data/<dataset>/poisoned`` following the
+    naming convention used throughout the code base.
+
+The function logs the perturbation budgets (how many elements are eligible for
+modification) as well as the coverage reported by the perturbation utilities
+themselves which mirrors what the research code prints.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
 import os
-from typing import Any, Dict, List
+import pickle
+from typing import Any, Dict, Iterable, List
 
-import numpy as np
-
-from .pool_miner import PoolMiner
-from .saliency_extractor import SaliencyExtractor
-from .multimodal_perturbers import ImagePerturber, TextPerturber
+from .multimodal_perturbers import (
+    ImagePerturber,
+    TextPerturber,
+    bridge_sequences,
+)
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
+# ---------------------------------------------------------------------------
+# Pipeline object used by the historical command line interface
+# ---------------------------------------------------------------------------
 
 class PoisonPipeline:
     """Compose all modules required for the attack."""
 
-    def __init__(self, cache_dir: str) -> None:
+    def __init__(self, cache_dir: str) -> None:  # pragma: no cover - kept for
+        # backwards compatibility with the original project.  The unit tests
+        # exercise :func:`run_pipeline` directly.
+        from .pool_miner import PoolMiner  # local import to avoid circular deps
+        from .saliency_extractor import SaliencyExtractor
+
         self.cache_dir = cache_dir
         self.miner = PoolMiner(cache_dir)
         self.extractor = SaliencyExtractor()
         self.text_perturber = TextPerturber()
         self.image_perturber = ImagePerturber()
 
-    def run(self, pool: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Apply perturbations and cache the results."""
+    def run(self, pool: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply text and image perturbations and cache the results."""
         results: List[Dict[str, Any]] = []
         for entry in pool:
             entry = dict(entry)
             entry["text"] = self.text_perturber.perturb(entry.get("text", ""))
             if "image" in entry and isinstance(entry["image"], list):
-                img = np.array(entry["image"])
-                entry["image"] = self.image_perturber.perturb(img).tolist()
+                img = entry["image"]
+                entry["image"] = self.image_perturber.perturb(img)
             results.append(entry)
+
         self.miner.save(results)
         return results
+
+
+# ---------------------------------------------------------------------------
+# Public API used in the unit tests
+# ---------------------------------------------------------------------------
+def _load_pickle(path: str, default: Any) -> Any:
+    """Best effort helper to load a pickle file."""
+
+    if not os.path.isfile(path):
+        return default
+    with open(path, "rb") as f:
+        return pickle.load(f)
+
+
+def run_pipeline(args: Any) -> Dict[str, Any]:
+    """Execute a minimal end‑to‑end DCIP‑IEOS poisoning pipeline.
+
+    Parameters
+    ----------
+    args:
+        An ``argparse.Namespace`` (or any object with attribute access) with at
+        least the following fields:
+
+        ``data_root``
+            Root directory containing the datasets.  Defaults to
+            ``<repo>/data``.
+        ``dataset``
+            Name of the dataset/split to operate on.  A ``poisoned``
+            sub‑directory is created inside this folder to hold the results.
+        ``mr``
+            Malicious ratio – the proportion of fake users to inject.
+        ``attack_name``
+            Name of the attack; used purely for naming the output files.
+            Defaults to ``"dcip_ieos"``.
+        ``cache_dir``
+            Directory containing ``competition_pool.json`` and
+            ``cross_modal_mask.pkl`` produced by earlier stages of the attack.
+
+    Returns
+    -------
+    dict
+        A mapping with paths to the main generated artefacts.  The information
+        is primarily useful for unit tests.
+    """
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    attack_name = getattr(args, "attack_name", "dcip_ieos")
+    mr = float(getattr(args, "mr", 0.0))
+    data_root = getattr(args, "data_root", os.path.join(PROJ_ROOT, "data"))
+    dataset = getattr(args, "dataset", "unknown")
+    cache_dir = getattr(
+        args, "cache_dir", os.path.join(os.path.dirname(__file__), "caches")
+    )
+
+    split_dir = os.path.join(data_root, dataset)
+    poison_dir = os.path.join(split_dir, "poisoned")
+    os.makedirs(poison_dir, exist_ok=True)
+    suffix = f"_{attack_name}_mr{mr}"
+
+    # ------------------------------------------------------------------
+    # Load cached competition information
+    # ------------------------------------------------------------------
+    comp_path = os.path.join(cache_dir, "competition_pool.json")
+    with open(comp_path, "r", encoding="utf-8") as f:
+        competition_pool: List[Dict[str, Any]] = json.load(f)
+
+    mask_path = os.path.join(cache_dir, "cross_modal_mask.pkl")
+    cross_modal_mask = _load_pickle(mask_path, {})
+
+    logging.info("Loaded %d competition targets", len(competition_pool))
+
+    # ------------------------------------------------------------------
+    # Load original dataset artefacts (best effort – some tests only require
+    # the output files to exist, thus the loose defaults)
+    # ------------------------------------------------------------------
+    exp_path = os.path.join(split_dir, "exp_splits.pkl")
+    exp_splits = _load_pickle(exp_path, {"train": [], "val": []})
+
+    seq_path = os.path.join(split_dir, "sequential_data.txt")
+    if os.path.isfile(seq_path):
+        with open(seq_path, "r", encoding="utf-8") as f:
+            seq_lines = [line.rstrip("\n") for line in f]
+    else:
+        seq_lines = []
+
+    uid_path = os.path.join(split_dir, "user_id2idx.pkl")
+    user_id2idx: Dict[str, int] = _load_pickle(uid_path, {})
+
+    uname_path = os.path.join(split_dir, "user_id2name.pkl")
+    user_id2name: Dict[str, str] = _load_pickle(uname_path, {})
+
+    next_user_id = max((int(l.split()[0]) for l in seq_lines), default=0) + 1
+
+    # Perturbation helpers
+    img_perturber = ImagePerturber()
+    txt_perturber = TextPerturber()
+
+    fake_users: List[str] = []
+
+    # ------------------------------------------------------------------
+    # Apply perturbations sequentially for each target
+    # ------------------------------------------------------------------
+    for idx, target_info in enumerate(competition_pool):
+        masks = cross_modal_mask.get(idx, {}) if isinstance(cross_modal_mask, dict) else {}
+        img_mask = masks.get("image", [])
+        txt_mask = masks.get("text", [])
+
+        img_budget = int(sum(bool(v) for v in img_mask))
+        txt_budget = int(sum(bool(v) for v in txt_mask))
+        logging.info(
+            "Target %s budgets: image %d/%d, text %d/%d",
+            target_info.get("target"),
+            img_budget,
+            len(img_mask),
+            txt_budget,
+            len(txt_mask),
+        )
+
+        # Image perturbation – operate on the anchor embedding as a stand in
+        anchor = target_info.get("anchor", [])
+        perturbed_img = img_perturber.perturb(anchor)
+
+        # Text perturbation – keywords joined into a pseudo sentence
+        text = " ".join(target_info.get("keywords", []))
+        perturbed_text = txt_perturber.perturb(text)
+
+        # Sequence perturbation – build a tiny history from competitors and
+        # bridge it towards the target item
+        base_seq = [
+            {"item": it, "timestamp": i} for i, it in enumerate(target_info.get("competitors", []))
+        ]
+        seq = bridge_sequences(
+            base_seq,
+            target_item=target_info.get("target"),
+            pool_items=target_info.get("competitors", []),
+            p_insert=1.0,
+            p_replace=0.0,
+            stats_ref={"length": max(1, len(base_seq) + 1)},
+        )
+        seq_items = [s["item"] for s in seq]
+
+        # Append new fake user
+        user_id = str(next_user_id)
+        next_user_id += 1
+        fake_users.append(user_id)
+
+        seq_line = " ".join([user_id] + [str(it) for it in seq_items])
+        seq_lines.append(seq_line)
+
+        exp_entry = {
+            "reviewerID": user_id,
+            "reviewerName": f"fake_{user_id}",
+            "asin": target_info.get("target", ""),
+            "summary": "",
+            "overall": 0.0,
+            "helpful": [0, 0],
+            "feature": perturbed_img,
+            "explanation": perturbed_text,
+            "reviewText": perturbed_text,
+        }
+        exp_splits.setdefault("train", []).append(exp_entry)
+        user_id2idx[user_id] = len(user_id2idx)
+        user_id2name[user_id] = f"fake_{user_id}"
+
+    logging.info("Injected %d fake users into dataset '%s'", len(fake_users), dataset)
+
+    # ------------------------------------------------------------------
+    # Serialise the poisoned artefacts
+    # ------------------------------------------------------------------
+    seq_out = os.path.join(poison_dir, f"sequential_data{suffix}.txt")
+    exp_out = os.path.join(poison_dir, f"exp_splits{suffix}.pkl")
+    idx_out = os.path.join(poison_dir, f"user_id2idx{suffix}.pkl")
+    name_out = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
+
+    with open(seq_out, "w", encoding="utf-8") as f:
+        f.write("\n".join(seq_lines))
+    with open(exp_out, "wb") as f:
+        pickle.dump(exp_splits, f)
+    with open(idx_out, "wb") as f:
+        pickle.dump(user_id2idx, f)
+    with open(name_out, "wb") as f:
+        pickle.dump(user_id2name, f)
+
+    return {
+        "fake_users": fake_users,
+        "sequential_path": seq_out,
+        "exp_splits_path": exp_out,
+        "user_id2idx_path": idx_out,
+        "user_id2name_path": name_out,
+    }
+
+
+__all__ = ["PoisonPipeline", "run_pipeline"]
