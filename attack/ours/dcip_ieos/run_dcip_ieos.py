@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pickle
 import sys
 from types import SimpleNamespace
 
@@ -164,7 +165,7 @@ def main() -> None:
         attack_name=args.attack_name,
         cache_dir=args.cache_dir,
     )
-    run_pipeline(pipeline_args)
+    poison_info = run_pipeline(pipeline_args)
 
     # ------------------------------------------------------------------
     # 4) Final checks
@@ -173,6 +174,25 @@ def main() -> None:
         raise RuntimeError("Missing cache files after pipeline execution")
     # Attempt to load the mask to ensure it is well-formed
     checks.load_cross_modal_mask(args.cache_dir)
+
+    # Validate poisoned artefacts
+    if not checks.poisoned_files_exist(
+        {k: v for k, v in poison_info.items() if isinstance(v, str)}
+    ):
+        raise RuntimeError("Missing poisoned data files")
+
+    with open(poison_info["exp_splits_path"], "rb") as f:
+        exp_splits = pickle.load(f)
+    with open(poison_info["sequential_path"], "r", encoding="utf-8") as f:
+        seq_lines = [line.rstrip("\n") for line in f]
+
+    checks.verify_embedding_shrinkage(comp_pool, exp_splits, poison_info["fake_users"])
+    checks.verify_poison_statistics(
+        comp_pool,
+        exp_splits,
+        seq_lines,
+        poison_info["fake_users"],
+    )
 
 
 if __name__ == "__main__":
