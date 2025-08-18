@@ -4,6 +4,10 @@ python attack/ours/dcip_ieos/run_dcip_ieos.py \
     --data-root data \
     --cache-dir attack/ours/dcip_ieos/caches \
     --pool-topk 5 \
+    --pop-path data/clothing/high_pop.txt \
+    --k 8 --c 20 \
+    --w-img 0.6 --w-txt 0.4 \
+    --use-pca --pca-dim 128 \
     --mask-top-p 0.15 \
     --mask-top-q 0.15 \
     --victim-ckpt path/to/BEST_EVAL_LOSS.pth  # 仅占位，可省略

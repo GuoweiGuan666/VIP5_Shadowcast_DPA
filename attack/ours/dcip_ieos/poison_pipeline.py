@@ -132,6 +132,24 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         args, "cache_dir", os.path.join(os.path.dirname(__file__), "caches")
     )
 
+    pop_path = getattr(args, "pop_path", None)
+    k = int(getattr(args, "k", 8))
+    c = int(getattr(args, "c", 20))
+    w_img = float(getattr(args, "w_img", 0.6))
+    w_txt = float(getattr(args, "w_txt", 0.4))
+    use_pca = bool(getattr(args, "use_pca", False))
+    pca_dim = getattr(args, "pca_dim", 128)
+    logging.info(
+        "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
+        pop_path,
+        k,
+        c,
+        w_img,
+        w_txt,
+        use_pca,
+        pca_dim,
+    )
+
     split_dir = os.path.join(data_root, dataset)
     poison_dir = os.path.join(split_dir, "poisoned")
     os.makedirs(poison_dir, exist_ok=True)
@@ -142,15 +160,40 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     # ------------------------------------------------------------------
     comp_path = os.path.join(cache_dir, f"competition_pool_{dataset}.json")
     if not os.path.isfile(comp_path):
-        # Build the competition pool on the fly from the raw pool if available
         raw_pool_path = os.path.join(split_dir, "pool.json")
-        if os.path.isfile(raw_pool_path):
+        if pop_path:
+            from .pool_miner import build_competition_pool as build_comp
+
+            data = build_comp(
+                dataset=dataset,
+                pop_path=pop_path,
+                model=None,
+                cache_dir=cache_dir,
+                w_img=w_img,
+                w_txt=w_txt,
+                pca_dim=pca_dim if use_pca else None,
+                kmeans_k=k,
+                c_size=c,
+            )
+            pool_dict = data.get("pool", {})
+            keywords = data.get("keywords", {})
+            comp_pool = [
+                {
+                    "target": int(tid) if str(tid).isdigit() else tid,
+                    "neighbors": info.get("competitors", []),
+                    "anchor": info.get("anchor", []),
+                    "keywords": keywords.get(str(tid), []),
+                }
+                for tid, info in pool_dict.items()
+            ]
+            with open(comp_path, "w", encoding="utf-8") as f:
+                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+        elif os.path.isfile(raw_pool_path):
             from .pool_miner import PoolMiner
 
             with open(raw_pool_path, "r", encoding="utf-8") as f:
                 raw_pool = json.load(f)
             comp_pool = PoolMiner.build_competition_pool(raw_pool)
-            # adapt field name to the expected ``neighbors`` key
             for entry in comp_pool:
                 entry["neighbors"] = entry.pop("competitors", [])
             with open(comp_path, "w", encoding="utf-8") as f:

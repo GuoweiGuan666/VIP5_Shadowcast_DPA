@@ -105,6 +105,46 @@ def parse_args() -> argparse.Namespace:
         help="Number of neighbours used when mining the competition pool.",
     )
     parser.add_argument(
+        "--pop-path",
+        default=None,
+        help="High popularity items file used for competition pool mining.",
+    )
+    parser.add_argument(
+        "--k",
+        type=int,
+        default=8,
+        help="Number of KMeans clusters for pool mining.",
+    )
+    parser.add_argument(
+        "--c",
+        type=int,
+        default=20,
+        help="Number of neighbours to keep for each target item.",
+    )
+    parser.add_argument(
+        "--w-img",
+        type=float,
+        default=0.6,
+        help="Weight of image embeddings during fusion.",
+    )
+    parser.add_argument(
+        "--w-txt",
+        type=float,
+        default=0.4,
+        help="Weight of text embeddings during fusion.",
+    )
+    parser.add_argument(
+        "--use-pca",
+        action="store_true",
+        help="Enable PCA dimensionality reduction for fused embeddings.",
+    )
+    parser.add_argument(
+        "--pca-dim",
+        type=int,
+        default=128,
+        help="Dimensionality after PCA when --use-pca is specified.",
+    )
+    parser.add_argument(
         "--mask-top-p",
         type=float,
         default=0.15,
@@ -138,21 +178,60 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 1) Mine or load the competition pool
     # ------------------------------------------------------------------
-    with open(args.pool_json, "r", encoding="utf-8") as f:
-        raw_pool = json.load(f)
 
     comp_path = os.path.join(
         args.cache_dir, f"competition_pool_{args.dataset}.json"
     )
+    logging.info(
+        "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
+        args.pop_path,
+        args.k,
+        args.c,
+        args.w_img,
+        args.w_txt,
+        args.use_pca,
+        args.pca_dim,
+    )
+    raw_pool = []
     if not os.path.isfile(comp_path):
-        miner = PoolMiner(args.cache_dir)
-        comp_pool = PoolMiner.build_competition_pool(
-            raw_pool, top_k=args.pool_topk
-        )
-        for entry in comp_pool:
-            entry["neighbors"] = entry.pop("competitors", [])
-        with open(comp_path, "w", encoding="utf-8") as f:
-            json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+        if args.pop_path:
+            from attack.ours.dcip_ieos.pool_miner import build_competition_pool
+
+            data = build_competition_pool(
+                dataset=args.dataset,
+                pop_path=args.pop_path,
+                model=None,
+                cache_dir=args.cache_dir,
+                w_img=args.w_img,
+                w_txt=args.w_txt,
+                pca_dim=args.pca_dim if args.use_pca else None,
+                kmeans_k=args.k,
+                c_size=args.c,
+            )
+            pool_dict = data.get("pool", {})
+            keywords = data.get("keywords", {})
+            comp_pool = [
+                {
+                    "target": int(tid) if str(tid).isdigit() else tid,
+                    "neighbors": info.get("competitors", []),
+                    "anchor": info.get("anchor", []),
+                    "keywords": keywords.get(str(tid), []),
+                }
+                for tid, info in pool_dict.items()
+            ]
+            with open(comp_path, "w", encoding="utf-8") as f:
+                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+        else:
+            with open(args.pool_json, "r", encoding="utf-8") as f:
+                raw_pool = json.load(f)
+            miner = PoolMiner(args.cache_dir)
+            comp_pool = PoolMiner.build_competition_pool(
+                raw_pool, top_k=args.pool_topk
+            )
+            for entry in comp_pool:
+                entry["neighbors"] = entry.pop("competitors", [])
+            with open(comp_path, "w", encoding="utf-8") as f:
+                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
     else:
         with open(comp_path, "r", encoding="utf-8") as f:
             comp_pool = json.load(f)
@@ -177,6 +256,13 @@ def main() -> None:
         mr=args.mr,
         attack_name="dcip_ieos",
         cache_dir=args.cache_dir,
+        pop_path=args.pop_path,
+        k=args.k,
+        c=args.c,
+        w_img=args.w_img,
+        w_txt=args.w_txt,
+        use_pca=args.use_pca,
+        pca_dim=args.pca_dim,
     )
     poison_info = run_pipeline(pipeline_args)
 
