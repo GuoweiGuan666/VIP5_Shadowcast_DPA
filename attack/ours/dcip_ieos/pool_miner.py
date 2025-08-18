@@ -34,10 +34,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from collections import Counter
-from typing import Any, Dict, Iterable, List
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import numpy as np
+
+try:  # Optional heavy dependencies
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+    from sklearn.feature_extraction.text import TfidfVectorizer
+except Exception:  # pragma: no cover - fallback if sklearn is missing
+    KMeans = PCA = TfidfVectorizer = None
+
+from attack.baselines.shadowcast.shadowcast_embedding import forward_inference
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -166,27 +176,251 @@ class PoolMiner:
 
 # ----------------------------------------------------------------------
 
+def build_competition_pool(
+    dataset: str,
+    pop_path: str,
+    model: Any,
+    *,
+    cache_dir: Optional[str] = None,
+    item_loader: Optional[Callable[[int], Dict[str, Any]]] = None,
+    w_img: float = 0.6,
+    w_txt: float = 0.4,
+    pca_dim: Optional[int] = None,
+    kmeans_k: int = 8,
+    c_size: int = 20,
+    keyword_top: int = 50,
+) -> Dict[str, Any]:
+    """Build and cache the competition pool for a dataset.
+
+    Parameters
+    ----------
+    dataset:
+        Name of the dataset used purely for book‑keeping.
+    pop_path:
+        Path to the text file containing the high popularity items.  The file
+        is expected to list entries of the form ``Item: <ASIN> (ID: <idx>)``.
+    model:
+        A (possibly stubbed) VIP5 model to be passed to
+        :func:`forward_inference`.
+    cache_dir:
+        Directory where the resulting JSON cache will be written.  Defaults to
+        ``attack/ours/dcip_ieos/caches``.
+    item_loader:
+        Optional callable ``item_loader(item_id) -> dict`` returning the raw
+        ``image_input``, ``text_input`` and ``text`` fields for the given item.
+        When omitted a minimal stub returning empty arrays is used which keeps
+        the function functional for unit tests without the real dataset.
+    w_img, w_txt:
+        Weights for combining the image and text embeddings.
+    pca_dim:
+        If not ``None`` the fused embeddings are reduced using PCA to this
+        dimensionality.
+    kmeans_k:
+        Number of clusters used for an optional KMeans step.  If the clustering
+        fails for any reason the code silently falls back to a single cluster
+        mode.
+    c_size:
+        Number of nearest neighbours to keep for each target item.
+    keyword_top:
+        Number of keywords to extract using TF‑IDF.
+    """
+
+    # ------------------------------------------------------------------
+    # 1) Parse the popularity file to obtain the set ``H`` of candidate items
+    high_pop: List[int] = []
+    pattern = re.compile(r"ID:\s*(\d+)")
+    with open(pop_path, "r", encoding="utf-8") as f:
+        for line in f:
+            match = pattern.search(line)
+            if match:
+                high_pop.append(int(match.group(1)))
+
+    if not high_pop:
+        raise ValueError(f"No items parsed from {pop_path!r}")
+
+    # ------------------------------------------------------------------
+    # 2) Compute fused embeddings ``E(.)`` for all items in ``H``
+    if item_loader is None:
+        # simple stub used in the tests – returns empty inputs
+        def item_loader(_item_id: int) -> Dict[str, Any]:
+            return {
+                "image_input": np.zeros(1, dtype=float),
+                "text_input": np.zeros(1, dtype=float),
+                "text": "",
+            }
+
+    fused_embs: List[np.ndarray] = []
+    texts: List[str] = []
+    for item_id in high_pop:
+        item = item_loader(item_id) or {}
+        img_in = item.get("image_input", np.zeros(1, dtype=float))
+        txt_in = item.get("text_input", np.zeros(1, dtype=float))
+        text = str(item.get("text", ""))
+
+        if model is not None:
+            outputs = forward_inference(model, img_in, txt_in)
+            img_emb = np.asarray(outputs.get("image_embedding", np.zeros(1))).astype(float).ravel()
+            txt_emb = np.asarray(outputs.get("text_embedding", np.zeros(1))).astype(float).ravel()
+        else:  # pragma: no cover - used only in CLI fallbacks
+            img_emb = np.asarray(img_in, dtype=float).ravel()
+            txt_emb = np.asarray(txt_in, dtype=float).ravel()
+        fused = w_img * img_emb + w_txt * txt_emb
+        fused_embs.append(fused)
+        texts.append(text)
+
+    emb_matrix = np.vstack(fused_embs)
+
+    # Optional dimensionality reduction
+    if pca_dim and PCA is not None and emb_matrix.shape[1] > pca_dim:
+        pca = PCA(n_components=pca_dim, random_state=0)
+        emb_matrix = pca.fit_transform(emb_matrix)
+
+    # ------------------------------------------------------------------
+    # 3) Optional KMeans clustering
+    clusters = None
+    labels = np.zeros(len(high_pop), dtype=int)
+    if kmeans_k and KMeans is not None and len(high_pop) >= kmeans_k:
+        try:
+            km = KMeans(n_clusters=kmeans_k, n_init=10, random_state=0)
+            labels = km.fit_predict(emb_matrix)
+            clusters = {"centroids": km.cluster_centers_.tolist()}
+        except Exception:
+            clusters = None
+            labels = np.zeros(len(high_pop), dtype=int)
+
+    # ------------------------------------------------------------------
+    # 4) For each target compute nearest neighbours inside its cluster
+    pool: Dict[str, Dict[str, Any]] = {}
+    keywords: Dict[str, List[str]] = {}
+    for idx, item_id in enumerate(high_pop):
+        cluster_members = np.where(labels == labels[idx])[0]
+        cluster_members = [i for i in cluster_members if i != idx]
+
+        if cluster_members:
+            emb = emb_matrix[idx]
+            others = emb_matrix[cluster_members]
+            norms = np.linalg.norm(others, axis=1) * (np.linalg.norm(emb) + 1e-12)
+            sims = (others @ emb) / np.where(norms == 0, 1e-12, norms)
+            order = np.argsort(-sims)[:c_size]
+            neigh_indices = [cluster_members[i] for i in order]
+        else:
+            neigh_indices = []
+
+        comp_ids = [int(high_pop[i]) for i in neigh_indices]
+        if neigh_indices:
+            anchor_vec = emb_matrix[neigh_indices].mean(axis=0)
+        else:
+            anchor_vec = emb_matrix[idx]
+
+        pool[str(item_id)] = {
+            "competitors": comp_ids,
+            "anchor": anchor_vec.tolist(),
+        }
+
+        neigh_texts = [texts[i] for i in neigh_indices]
+        if neigh_texts and TfidfVectorizer is not None:
+            try:
+                vect = TfidfVectorizer(max_features=keyword_top)
+                tfidf = vect.fit_transform(neigh_texts)
+                scores = np.asarray(tfidf.sum(axis=0)).ravel()
+                order = np.argsort(-scores)[:keyword_top]
+                top_terms = vect.get_feature_names_out()[order]
+                keywords[str(item_id)] = top_terms.tolist()
+            except Exception:
+                counts = Counter(" ".join(neigh_texts).split())
+                keywords[str(item_id)] = [w for w, _ in counts.most_common(keyword_top)]
+        else:
+            counts = Counter(" ".join(neigh_texts).split())
+            keywords[str(item_id)] = [w for w, _ in counts.most_common(keyword_top)]
+
+    # ------------------------------------------------------------------
+    # 5) Persist to disk
+    if cache_dir is None:
+        cache_dir = os.path.join(os.path.dirname(__file__), "caches")
+    os.makedirs(cache_dir, exist_ok=True)
+    out_path = os.path.join(cache_dir, f"competition_pool_{dataset}.json")
+
+    data = {
+        "dataset": dataset,
+        "high_pop": high_pop,
+        "clusters": clusters,
+        "pool": pool,
+        "keywords": keywords,
+        "params": {
+            "w_img": w_img,
+            "w_txt": w_txt,
+            "pca_dim": pca_dim,
+            "kmeans_k": kmeans_k,
+            "c_size": c_size,
+            "keyword_top": keyword_top,
+        },
+    }
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    return data
+
+
+# ----------------------------------------------------------------------
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the DCIP-IEOS attack")
-    parser.add_argument("--input-pool", required=True, help="raw competition pool JSON")
+    """Parse command line options for the module CLI.
+
+    Two modes are supported:
+
+    * When ``--input-pool`` is provided the full poisoning pipeline is
+      executed (legacy behaviour).
+    * Otherwise ``--dataset`` and ``--pop-path`` are expected and the
+      competition pool mining routine is invoked.
+    """
+
+    parser = argparse.ArgumentParser(description="Utilities for DCIP-IEOS pool mining")
+    parser.add_argument("--dataset", help="dataset name")
+    parser.add_argument("--pop-path", help="path to high popularity items file")
+    parser.add_argument("--input-pool", help="raw competition pool JSON for full pipeline")
     parser.add_argument(
         "--output-dir",
         default=os.path.join(os.path.dirname(__file__), "caches"),
         help="directory for cached artifacts",
     )
+    parser.add_argument("--pca-dim", type=int, default=None, help="optional PCA dimensionality")
+    parser.add_argument("--kmeans-k", type=int, default=8, help="number of KMeans clusters")
+    parser.add_argument("--no-kmeans", action="store_true", help="disable KMeans clustering")
+    parser.add_argument("--c-size", type=int, default=20, help="number of neighbours per target")
+    parser.add_argument("--keyword-top", type=int, default=50, help="number of mined keywords")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    with open(args.input_pool, "r", encoding="utf-8") as f:
-        pool = json.load(f)
+    
 
-    # Local import to avoid a circular dependency – ``poison_pipeline`` imports
-    # :class:`PoolMiner` from this module.
-    from .poison_pipeline import PoisonPipeline
-    pipeline = PoisonPipeline(args.output_dir)
-    pipeline.run(pool)
+    if args.input_pool:
+        with open(args.input_pool, "r", encoding="utf-8") as f:
+            pool = json.load(f)
+
+        # Local import to avoid a circular dependency – ``poison_pipeline`` imports
+        # :class:`PoolMiner` from this module.
+        from .poison_pipeline import PoisonPipeline
+
+        pipeline = PoisonPipeline(args.output_dir)
+        pipeline.run(pool)
+        return
+
+    if not args.dataset or not args.pop_path:
+        raise SystemExit("--dataset and --pop-path are required when mining the competition pool")
+
+    build_competition_pool(
+        dataset=args.dataset,
+        pop_path=args.pop_path,
+        model=None,  # Model loading is out of scope for this utility
+        cache_dir=args.output_dir,
+        pca_dim=args.pca_dim,
+        kmeans_k=None if args.no_kmeans else args.kmeans_k,
+        c_size=args.c_size,
+        keyword_top=args.keyword_top,
+    )
 
 
 if __name__ == "__main__":
