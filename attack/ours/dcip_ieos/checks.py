@@ -12,11 +12,13 @@ structures to keep them fast and portable.
 
 from __future__ import annotations
 
+import logging
 import math
 
 import os
 import pickle
-from typing import Any, Dict, Sequence
+import random
+from typing import Any, Dict, Optional, Sequence
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -61,6 +63,20 @@ def _l2_distance(x: Sequence[float], y: Sequence[float]) -> float:
 
     n = min(len(x), len(y))
     return math.sqrt(sum((float(a) - float(b)) ** 2 for a, b in zip(x[:n], y[:n])))
+
+
+def _cosine_similarity(x: Sequence[float], y: Sequence[float]) -> float:
+    """Return the cosine similarity between two vectors."""
+
+    n = min(len(x), len(y))
+    if n == 0:
+        return 0.0
+    dot = sum(float(a) * float(b) for a, b in zip(x[:n], y[:n]))
+    norm_x = math.sqrt(sum(float(a) ** 2 for a in x[:n]))
+    norm_y = math.sqrt(sum(float(b) ** 2 for b in y[:n]))
+    if norm_x == 0.0 or norm_y == 0.0:
+        return 0.0
+    return dot / (norm_x * norm_y)
 
 
 def verify_embedding_shrinkage(
@@ -182,6 +198,126 @@ def verify_poison_statistics(
             )
         if str(tgt.get("target")) not in seq:
             raise AssertionError(f"Target item missing in sequence for {user_id}")
+        
+
+def evaluate_anchor_similarity(
+    competition_pool: Sequence[Dict[str, Any]],
+    *,
+    sample_size: int = 5,
+    cache_dir: Optional[str] = None,
+    pca: bool = False,
+) -> Dict[str, float]:
+    """Compare target embeddings to anchors and random averages.
+
+    Randomly samples ``sample_size`` targets ``t`` from ``competition_pool`` and
+    compares the cosine similarity between the target embedding ``E(t)`` and the
+    pre‑computed ``anchor`` against the similarity between ``E(t)`` and a
+    randomly sampled average of other anchors.  An :class:`AssertionError` is
+    raised if any sampled target is closer to the random average than to its
+    own anchor.  Basic statistics are returned and logged.
+
+    When ``pca`` is ``True`` and the required optional dependencies are
+    available, a 2D PCA projection of anchors and their neighbours is saved as
+    ``competition_pool_pca.png`` in ``cache_dir``.
+    """
+
+    if not competition_pool:
+        logging.info("Empty competition pool – skipping anchor similarity check")
+        return {"samples": 0, "anchor_mean": 0.0, "random_mean": 0.0}
+
+    rng = random.Random()
+    sample = rng.sample(competition_pool, min(sample_size, len(competition_pool)))
+
+    anchor_sims = []
+    random_sims = []
+    for entry in sample:
+        target_vec = entry.get("embedding") or entry.get("feature") or []
+        anchor_vec = entry.get("anchor", [])
+        if not target_vec or not anchor_vec:
+            continue
+
+        cos_anchor = _cosine_similarity(target_vec, anchor_vec)
+
+        # Random average of other anchors used as a "hot" baseline
+        others = [e for e in competition_pool if e is not entry and e.get("anchor")]
+        hot_sample = rng.sample(others, min(len(others), 5)) if others else []
+        if hot_sample:
+            dim = len(anchor_vec)
+            avg = [0.0] * dim
+            for o in hot_sample:
+                vec = o.get("anchor", [])
+                n = min(dim, len(vec))
+                for i in range(n):
+                    avg[i] += float(vec[i])
+            for i in range(dim):
+                avg[i] /= len(hot_sample)
+            cos_rand = _cosine_similarity(target_vec, avg)
+        else:
+            cos_rand = 0.0
+
+        if cos_anchor < cos_rand:
+            raise AssertionError(
+                f"Anchor less similar than random average for target {entry.get('target')}"
+            )
+
+        anchor_sims.append(cos_anchor)
+        random_sims.append(cos_rand)
+
+    stats = {
+        "samples": len(anchor_sims),
+        "anchor_mean": sum(anchor_sims) / len(anchor_sims) if anchor_sims else 0.0,
+        "random_mean": sum(random_sims) / len(random_sims) if random_sims else 0.0,
+    }
+
+    logging.info(
+        "Anchor similarity over %d samples: anchor %.4f vs random %.4f",
+        stats["samples"],
+        stats["anchor_mean"],
+        stats["random_mean"],
+    )
+
+    if pca and cache_dir:
+        try:  # optional heavy dependencies
+            from sklearn.decomposition import PCA
+            import matplotlib.pyplot as plt
+            import numpy as np
+        except Exception as exc:  # pragma: no cover - best effort
+            logging.warning("PCA visualisation skipped: %s", exc)
+        else:
+            vectors = []
+            labels = []  # 0 anchor, 1 neighbour
+            id_map = {str(e.get("target")): e for e in competition_pool}
+            for entry in competition_pool:
+                a = entry.get("anchor")
+                if a:
+                    vectors.append(a)
+                    labels.append(0)
+                for n_id in entry.get("neighbors") or entry.get("competitors", []):
+                    neigh = id_map.get(str(n_id))
+                    if neigh is not None:
+                        vec = neigh.get("embedding") or neigh.get("feature") or neigh.get("anchor")
+                        if vec:
+                            vectors.append(vec)
+                            labels.append(1)
+            if len(vectors) >= 2:
+                pca_model = PCA(n_components=2)
+                arr = np.asarray(vectors, dtype=float)
+                proj = pca_model.fit_transform(arr)
+                anchors = [i for i, l in enumerate(labels) if l == 0]
+                neighs = [i for i, l in enumerate(labels) if l == 1]
+                plt.figure()
+                if anchors:
+                    plt.scatter(proj[anchors, 0], proj[anchors, 1], c="red", label="anchor")
+                if neighs:
+                    plt.scatter(proj[neighs, 0], proj[neighs, 1], c="blue", label="neighbor")
+                plt.legend()
+                out_path = os.path.join(cache_dir, "competition_pool_pca.png")
+                plt.savefig(out_path)
+                plt.close()
+                logging.info("Saved PCA visualisation to %s", out_path)
+
+    return stats
+
 
 
 __all__ = [
@@ -190,4 +326,5 @@ __all__ = [
     "poisoned_files_exist",
     "verify_embedding_shrinkage",
     "verify_poison_statistics",
+    "evaluate_anchor_similarity",
 ]

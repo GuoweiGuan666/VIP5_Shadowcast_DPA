@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import pickle
 import sys
@@ -124,6 +125,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
 
     # ------------------------------------------------------------------
@@ -203,6 +205,9 @@ def main() -> None:
         exp_splits,
         seq_lines,
         poison_info["fake_users"],
+    )
+    checks.evaluate_anchor_similarity(
+        comp_pool, cache_dir=args.cache_dir, pca=True
     )
 
 
