@@ -1,0 +1,9 @@
+python attack/ours/dcip_ieos/run_dcip_ieos.py \
+    --dataset clothing \
+    --mr 0.01 \
+    --data-root data \
+    --cache-dir attack/ours/dcip_ieos/caches \
+    --pool-topk 5 \
+    --mask-top-p 0.15 \
+    --mask-top-q 0.15 \
+    --victim-ckpt path/to/BEST_EVAL_LOSS.pth  # 仅占位，可省略
