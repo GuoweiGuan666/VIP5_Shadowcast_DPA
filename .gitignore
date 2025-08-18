@@ -65,3 +65,8 @@ project_code_extracted.txt
 # ================================
 # !data/config.json
 # !data/small_sample.txt
+
+
+# Cache files
+!attack/ours/dcip_ieos/caches/competition_pool.json
+!attack/ours/dcip_ieos/caches/cross_modal_mask.pkl
