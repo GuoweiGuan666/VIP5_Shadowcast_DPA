@@ -27,8 +27,12 @@ PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 def cache_files_exist(cache_dir: str) -> bool:
     """Return ``True`` if default cache files exist in ``cache_dir``."""
 
-    required = ("competition_pool.json", "cross_modal_mask.pkl")
-    return all(os.path.isfile(os.path.join(cache_dir, r)) for r in required)
+    has_comp = any(
+        fname.startswith("competition_pool") and fname.endswith(".json")
+        for fname in os.listdir(cache_dir)
+    )
+    mask_ok = os.path.isfile(os.path.join(cache_dir, "cross_modal_mask.pkl"))
+    return has_comp and mask_ok
 
 
 def load_cross_modal_mask(cache_dir: str) -> Any:
@@ -170,7 +174,8 @@ def verify_poison_statistics(
 
         # Sequence statistics
         seq = seq_map.get(user_id, [])
-        expected_len = max(1, len(tgt.get("competitors", [])) + 1)
+        neighbours = tgt.get("neighbors") or tgt.get("competitors", [])
+        expected_len = max(1, len(neighbours) + 1)
         if abs(len(seq) - expected_len) > seq_len_tolerance:
             raise AssertionError(
                 f"Sequence length for user {user_id} outside tolerance"

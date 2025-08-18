@@ -108,7 +108,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             Name of the attack; used purely for naming the output files.
             Defaults to ``"dcip_ieos"``.
         ``cache_dir``
-            Directory containing ``competition_pool.json`` and
+            Directory containing ``competition_pool_<dataset>.json`` and
             ``cross_modal_mask.pkl`` produced by earlier stages of the attack.
 
     Returns
@@ -120,7 +120,11 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    attack_name = getattr(args, "attack_name", "dcip_ieos")
+    # arguments ---------------------------------------------------------
+    # ``attack_name`` is accepted for backwards compatibility but the output
+    # files always use the fixed ``dcip_ieos`` prefix to match the data
+    # loaders shipped with the project.
+    getattr(args, "attack_name", None)  # consume but ignore custom values
     mr = float(getattr(args, "mr", 0.0))
     data_root = getattr(args, "data_root", os.path.join(PROJ_ROOT, "data"))
     dataset = getattr(args, "dataset", "unknown")
@@ -131,12 +135,29 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     split_dir = os.path.join(data_root, dataset)
     poison_dir = os.path.join(split_dir, "poisoned")
     os.makedirs(poison_dir, exist_ok=True)
-    suffix = f"_{attack_name}_mr{mr}"
+    suffix = f"_dcip_ieos_mr{mr}"
 
     # ------------------------------------------------------------------
-    # Load cached competition information
+    # Ensure competition pool exists (dataset specific)
     # ------------------------------------------------------------------
-    comp_path = os.path.join(cache_dir, "competition_pool.json")
+    comp_path = os.path.join(cache_dir, f"competition_pool_{dataset}.json")
+    if not os.path.isfile(comp_path):
+        # Build the competition pool on the fly from the raw pool if available
+        raw_pool_path = os.path.join(split_dir, "pool.json")
+        if os.path.isfile(raw_pool_path):
+            from .pool_miner import PoolMiner
+
+            with open(raw_pool_path, "r", encoding="utf-8") as f:
+                raw_pool = json.load(f)
+            comp_pool = PoolMiner.build_competition_pool(raw_pool)
+            # adapt field name to the expected ``neighbors`` key
+            for entry in comp_pool:
+                entry["neighbors"] = entry.pop("competitors", [])
+            with open(comp_path, "w", encoding="utf-8") as f:
+                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+        else:  # pragma: no cover - best effort fallback
+            with open(comp_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
     with open(comp_path, "r", encoding="utf-8") as f:
         competition_pool: List[Dict[str, Any]] = json.load(f)
 
@@ -200,15 +221,16 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         text = " ".join(target_info.get("keywords", []))
         perturbed_text = txt_perturber.perturb(text)
 
-        # Sequence perturbation – build a tiny history from competitors and
+        # Sequence perturbation – build a tiny history from neighbours and
         # bridge it towards the target item
+        neighbours = target_info.get("neighbors") or target_info.get("competitors", [])
         base_seq = [
-            {"item": it, "timestamp": i} for i, it in enumerate(target_info.get("competitors", []))
+            {"item": it, "timestamp": i} for i, it in enumerate(neighbours)
         ]
         seq = bridge_sequences(
             base_seq,
             target_item=target_info.get("target"),
-            pool_items=target_info.get("competitors", []),
+            pool_items=neighbours,
             p_insert=1.0,
             p_replace=0.0,
             stats_ref={"length": max(1, len(base_seq) + 1)},

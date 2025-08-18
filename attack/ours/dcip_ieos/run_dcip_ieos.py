@@ -11,7 +11,7 @@ third‑party dependencies which keeps the script portable and fast to execute.
 The script performs the following stages:
 
 1.  **Pool mining** – consume a raw competition pool file and persist
-    ``competition_pool.json`` in the cache directory.  The simple miner computes
+    ``competition_pool_<dataset>.json`` in the cache directory.  The simple miner computes
     cosine‑similarity based neighbours and mines a few keywords.
 2.  **Saliency extraction** – compute cross‑modal masks for the pool items and
     cache them as ``cross_modal_mask.pkl``.
@@ -134,15 +134,26 @@ def main() -> None:
     os.makedirs(args.cache_dir, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # 1) Mine the competition pool
+    # 1) Mine or load the competition pool
     # ------------------------------------------------------------------
     with open(args.pool_json, "r", encoding="utf-8") as f:
         raw_pool = json.load(f)
 
-    miner = PoolMiner(args.cache_dir)
-    comp_pool = PoolMiner.build_competition_pool(raw_pool, top_k=args.pool_topk)
-    with open(miner.out_path, "w", encoding="utf-8") as f:
-        json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+    comp_path = os.path.join(
+        args.cache_dir, f"competition_pool_{args.dataset}.json"
+    )
+    if not os.path.isfile(comp_path):
+        miner = PoolMiner(args.cache_dir)
+        comp_pool = PoolMiner.build_competition_pool(
+            raw_pool, top_k=args.pool_topk
+        )
+        for entry in comp_pool:
+            entry["neighbors"] = entry.pop("competitors", [])
+        with open(comp_path, "w", encoding="utf-8") as f:
+            json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+    else:
+        with open(comp_path, "r", encoding="utf-8") as f:
+            comp_pool = json.load(f)
 
     # ------------------------------------------------------------------
     # 2) Extract saliency masks
@@ -162,7 +173,7 @@ def main() -> None:
         data_root=args.data_root,
         dataset=args.dataset,
         mr=args.mr,
-        attack_name=args.attack_name,
+        attack_name="dcip_ieos",
         cache_dir=args.cache_dir,
     )
     poison_info = run_pipeline(pipeline_args)
