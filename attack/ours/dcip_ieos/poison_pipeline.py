@@ -99,6 +99,20 @@ def _l2_distance(x: Iterable[float], y: Iterable[float]) -> float:
     )
 
 
+def _psnr(orig: Iterable[float], pert: Iterable[float], peak: Optional[float] = None) -> float:
+    """Compute the Peak Signal to Noise Ratio between two vectors."""
+
+    o = list(orig)
+    p = list(pert)
+    n = min(len(o), len(p))
+    if n == 0:
+        return float("inf")
+    data_range = peak if peak is not None else (max(o) - min(o))
+    if data_range <= 0:
+        data_range = 1e-12
+    mse = sum((a - b) ** 2 for a, b in zip(o[:n], p[:n])) / n
+    return 10 * math.log10((data_range ** 2) / (mse + 1e-12))
+
 
 def run_pipeline(args: Any) -> Dict[str, Any]:
     """Execute a minimal end‑to‑end DCIP‑IEOS poisoning pipeline.
@@ -157,6 +171,9 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     pca_dim = getattr(args, "pca_dim", 128)
     p_insert = float(getattr(args, "p_insert", 0.2))
     p_replace = float(getattr(args, "p_replace", 0.2))
+    inner_rounds = int(getattr(args, "inner_rounds", 1))
+    tau_align = float(getattr(args, "tau_align", 0.0))
+    recompute_masks = bool(getattr(args, "recompute_masks", False))
     logging.info(
         "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
         pop_path,
@@ -281,9 +298,13 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     # Perturbation helpers
     img_perturber = ImagePerturber()
     txt_perturber = TextPerturber()
+    img_eps_budget = float(getattr(args, "img_eps_budget", img_perturber.eps))
+    txt_ratio_budget = float(getattr(args, "txt_ratio_budget", txt_perturber.ratio))
 
     fake_users: List[str] = []
     distance_cache: Dict[str, float] = {}
+    analysis_log: Dict[str, Any] = {}
+
 
     # ------------------------------------------------------------------
     # Apply perturbations sequentially for each target
@@ -304,14 +325,59 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             len(txt_mask),
         )
 
-        # Image perturbation – operate on the anchor embedding as a stand in
         anchor = target_info.get("anchor", [])
         target_vec = target_info.get("target_feat", [0.0] * len(anchor))
-        perturbed_img = img_perturber.perturb(anchor, img_mask, target_vec)
+        keywords = target_info.get("keywords", [])
+        text = " ".join(keywords)
+        orig_tokens = text.split()
+        curr_img = list(anchor)
+        curr_text = text
+        img_eps_used = 0.0
+        text_ratio = 0.0
+        round_metrics: List[Dict[str, float]] = []
+        termination = "max_rounds"
 
-        dist_anchor = _l2_distance(perturbed_img, anchor)
+        for r in range(inner_rounds):
+            prev_img = list(curr_img)
+            perturbed_img = img_perturber.perturb(curr_img, img_mask, target_vec)
+            dist_before = _l2_distance(curr_img, target_vec)
+            dist_after = _l2_distance(perturbed_img, target_vec)
+            delta_align = dist_before - dist_after
+            psnr = _psnr(prev_img, perturbed_img)
+            curr_img = perturbed_img
+            if curr_img:
+                img_eps_used = max(
+                    abs(a - b) for a, b in zip(curr_img, anchor)
+                )
+
+            if r == 0 or recompute_masks:
+                prev_text = curr_text
+                curr_text = txt_perturber.perturb(curr_text, txt_mask, keywords)
+            curr_tokens = curr_text.split()
+            replaced_total = sum(
+                o != c for o, c in zip(orig_tokens, curr_tokens)
+            )
+            text_ratio = replaced_total / max(len(orig_tokens), 1)
+
+            round_metrics.append(
+                {
+                    "round": r,
+                    "delta_align": delta_align,
+                    "psnr": psnr,
+                    "text_ratio": text_ratio,
+                }
+            )
+
+            if delta_align < tau_align:
+                termination = "aligned"
+                break
+            if img_eps_used >= img_eps_budget or text_ratio >= txt_ratio_budget:
+                termination = "budget"
+                break
+
+        dist_anchor = _l2_distance(curr_img, anchor)
         dist_before = _l2_distance(anchor, target_vec)
-        dist_target = _l2_distance(perturbed_img, target_vec)
+        dist_target = _l2_distance(curr_img, target_vec)
         delta = dist_target - dist_before
         logging.info(
             "Target %s L2 distances: anchor %.4f, target %.4f -> %.4f (Δ%.4f)",
@@ -322,10 +388,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             delta,
         )
 
-        # Text perturbation – keywords joined into a pseudo sentence
-        keywords = target_info.get("keywords", [])
-        text = " ".join(keywords)
-        perturbed_text = txt_perturber.perturb(text, txt_mask, keywords)
+        perturbed_text = curr_text
 
         # Sequence perturbation – build a tiny history from neighbours and
         # bridge it towards the target item
@@ -348,6 +411,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         next_user_id += 1
         fake_users.append(user_id)
         distance_cache[user_id] = delta
+        analysis_log[user_id] = {"termination": termination, "rounds": round_metrics}
 
         seq_line = " ".join([user_id] + [str(it) for it in seq_items])
         seq_lines.append(seq_line)
@@ -392,6 +456,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     name_out = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
     kw_out = os.path.join(poison_dir, f"keywords{suffix}.pkl")
     delta_out = os.path.join(poison_dir, f"embedding_deltas{suffix}.pkl")
+    metrics_out = os.path.join(poison_dir, f"round_metrics{suffix}.pkl")
 
     with open(seq_out, "w", encoding="utf-8") as f:
         f.write("\n".join(seq_lines))
@@ -405,6 +470,8 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         pickle.dump(keywords_map, f)
     with open(delta_out, "wb") as f:
         pickle.dump(distance_cache, f)
+    with open(metrics_out, "wb") as f:
+        pickle.dump(analysis_log, f)
 
 
     return {
@@ -415,6 +482,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         "user_id2name_path": name_out,
         "keywords_path": kw_out,
         "delta_path": delta_out,
+        "metrics_path": metrics_out,
     }
 
 
