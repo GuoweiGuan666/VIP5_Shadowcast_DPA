@@ -65,6 +65,7 @@ class SaliencyExtractor:
         cache_dir: Optional[str] = None,
         top_p: float = 0.15,
         top_q: float = 0.15,
+        vis_token_pos: Optional[Iterable[Iterable[int]]] = None,
     ) -> Dict[int, Dict[str, List[bool]]]:
         """Compute cross‑modal saliency masks for ``items``.
 
@@ -115,6 +116,8 @@ class SaliencyExtractor:
 
         masks: Dict[int, Dict[str, List[bool]]] = {}
 
+        vis_pos_list = list(vis_token_pos) if vis_token_pos is not None else None
+
         for idx, item in enumerate(items):
             image_vec = _to_float_list(item.get("image", []))
             text_vec = _encode_text(item.get("text", ""))
@@ -139,6 +142,17 @@ class SaliencyExtractor:
 
             img_mask = _topk_mask(img_scores, top_p)
             txt_mask = _topk_mask(txt_scores, top_q)
+
+            if vis_pos_list is not None and idx < len(vis_pos_list):
+                try:
+                    pos_list = [int(p) for p in vis_pos_list[idx]]
+                    img_mask = [
+                        img_mask[p]
+                        for p in pos_list
+                        if 0 <= p < len(img_mask)
+                    ]
+                except Exception:
+                    pass
 
             masks[idx] = {"image": img_mask, "text": txt_mask}
 

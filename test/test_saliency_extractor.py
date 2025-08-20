@@ -36,9 +36,12 @@ def test_extract_cross_modal_masks_with_attentions(tmp_path):
             ],
         }
     ]
-    masks = extractor.extract_cross_modal_masks(items, cache_dir=str(tmp_path))
-    assert len(masks[0]["image"]) == 3
+    masks = extractor.extract_cross_modal_masks(
+        items, cache_dir=str(tmp_path), vis_token_pos=[[2, 0]]
+    )
+    assert len(masks[0]["image"]) == 2
     assert len(masks[0]["text"]) == 4
     # The cross attention scores favour the first image token and the second text token
-    assert masks[0]["image"] == [True, False, False]
+    # After reordering/cropping according to vis_token_pos we expect mask[2], mask[0]
+    assert masks[0]["image"] == [False, True]
     assert masks[0]["text"] == [False, True, False, False]

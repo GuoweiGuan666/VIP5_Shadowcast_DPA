@@ -234,6 +234,8 @@ class ImagePerturber:
         x = [float(v) for v in getattr(image, "flatten", lambda: image)()]
         if mask is None or len(mask) == 0:
             mask = [True] * len(x)
+        else:
+            assert len(mask) == len(x), "mask length must equal number of visual tokens"
         if target_feat is None:
             target_feat = [0.0] * len(x)
         m = [bool(v) for v in mask]
