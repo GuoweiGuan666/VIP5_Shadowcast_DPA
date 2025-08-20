@@ -74,8 +74,10 @@ class SaliencyExtractor:
         1. Each item's image and text are converted into simple numerical
            representations.  Images are flattened to a list of floats and text
            is mapped to the ordinal value of each character.
-        2. A cross‑attention matrix is approximated by taking the absolute
-           outer product between the image and text vectors.
+        2. If ``cross_attentions`` are provided by the caller they are used
+           directly. Otherwise a cross‑attention matrix is approximated by
+           taking the absolute outer product between the image and text
+           vectors.
         3. Image saliency is the sum over the text dimension and vice versa for
            text saliency.
         4. The top‑``p`` (image) and top‑``q`` (text) proportions are converted
@@ -117,16 +119,17 @@ class SaliencyExtractor:
             image_vec = _to_float_list(item.get("image", []))
             text_vec = _encode_text(item.get("text", ""))
 
-            cross_attn: Optional[List[List[float]]] = None
-            try:
-                cross_attn = [
-                    [abs(i_val * t_val) for t_val in text_vec]
-                    for i_val in image_vec
-                ]
-            except Exception:
-                cross_attn = None
+            cross_attn: Optional[List[List[float]]] = item.get("cross_attentions")
+            if cross_attn is None:
+                try:
+                    cross_attn = [
+                        [abs(i_val * t_val) for t_val in text_vec]
+                        for i_val in image_vec
+                    ]
+                except Exception:
+                    cross_attn = None
 
-            if cross_attn:
+            if cross_attn is not None:
                 img_scores = [sum(row) for row in cross_attn]
                 txt_scores = [sum(col) for col in zip(*cross_attn)]
             else:

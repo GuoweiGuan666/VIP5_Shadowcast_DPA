@@ -1152,8 +1152,6 @@ class VIP5(T5ForConditionalGeneration):
             past_key_values=decoder_outputs.past_key_values,
             decoder_last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions if output_attentions else None,
-            cross_attentions=decoder_outputs.cross_attentions if output_attentions else None,
         )
 
     def prepare_inputs_for_generation(
@@ -1251,13 +1249,6 @@ class VIP5Seq2SeqLMOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention heads, useful for
-            computing saliency scores based on the interaction between modalities.
-
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1266,7 +1257,6 @@ class VIP5Seq2SeqLMOutput(ModelOutput):
     decoder_last_hidden_state: Optional[Tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None

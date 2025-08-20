@@ -21,3 +21,24 @@ def test_extract_generator():
     gen = (x for x in [1.0, -2.0, 3.0])
     result = extractor.extract(gen)
     assert result == [1.0, 2.0, 3.0]
+
+
+def test_extract_cross_modal_masks_with_attentions(tmp_path):
+    extractor = SaliencyExtractor()
+    items = [
+        {
+            "image": [0.0, 0.0, 0.0],
+            "text": "abcd",
+            "cross_attentions": [
+                [1, 2, 3, 4],
+                [4, 3, 2, 1],
+                [0, 1, 0, 1],
+            ],
+        }
+    ]
+    masks = extractor.extract_cross_modal_masks(items, cache_dir=str(tmp_path))
+    assert len(masks[0]["image"]) == 3
+    assert len(masks[0]["text"]) == 4
+    # The cross attention scores favour the first image token and the second text token
+    assert masks[0]["image"] == [True, False, False]
+    assert masks[0]["text"] == [False, True, False, False]
