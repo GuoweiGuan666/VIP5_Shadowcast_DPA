@@ -239,9 +239,28 @@ def main() -> None:
     # ------------------------------------------------------------------
     # 2) Extract saliency masks
     # ------------------------------------------------------------------
+    # ``extract_cross_modal_masks`` expects each item to expose ``image`` and
+    # ``text`` fields.  The competition pool produced by the miner only stores
+    # metadata such as neighbours and anchors, therefore we re-load the raw
+    # pool (if necessary) and align it with the order of ``comp_pool`` so that
+    # the resulting mask has one entry per target item.
+    if raw_pool:
+        raw_map = {entry.get("id"): entry for entry in raw_pool}
+    elif os.path.isfile(args.pool_json):
+        with open(args.pool_json, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+        raw_map = {entry.get("id"): entry for entry in raw_data}
+    else:
+        raw_map = {}
+
+    mask_pool = []
+    for entry in comp_pool:
+        item = raw_map.get(entry.get("target"), {})
+        mask_pool.append({"image": item.get("image", []), "text": item.get("text", "")})
+
     extractor = SaliencyExtractor()
     extractor.extract_cross_modal_masks(
-        raw_pool,
+        mask_pool,
         cache_dir=args.cache_dir,
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
