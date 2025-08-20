@@ -90,7 +90,7 @@ narwhals==1.16.0
 netifaces==0.11.0
 networkx==3.4.2
 ninja==1.11.1.2
-numpy==1.26.4
+numpy==1.26.4  # required for DCIP-IEOS pipeline
 nvidia-cublas-cu11==11.10.3.66
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu11==11.7.101

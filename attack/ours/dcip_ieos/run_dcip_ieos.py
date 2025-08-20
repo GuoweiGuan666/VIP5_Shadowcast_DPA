@@ -36,6 +36,16 @@ import sys
 from types import SimpleNamespace
 from typing import Dict
 
+try:
+    import numpy as np
+except ImportError as err:  # pragma: no cover - dependency hint
+    sys.stderr.write(
+        "This script requires 'numpy'. Install it via `pip install numpy` "
+        "or rewrite using Python's built-in `array` and `math` modules for a "
+        "simplified pure Python alternative.\n"
+    )
+    raise
+
 # ``run_dcip_ieos.py`` lives inside the package but we want the file to work
 # both when executed as ``python -m attack.ours.dcip_ieos.run_dcip_ieos`` and
 # when called directly via its path.  The ``__package__`` check below adjusts
