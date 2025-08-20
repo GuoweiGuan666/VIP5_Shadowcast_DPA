@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import pickle
 from typing import Any, Dict, Iterable, List
@@ -85,6 +86,18 @@ def _load_pickle(path: str, default: Any) -> Any:
         return default
     with open(path, "rb") as f:
         return pickle.load(f)
+    
+
+def _l2_distance(x: Iterable[float], y: Iterable[float]) -> float:
+    """Return the L2 distance between two vectors."""
+
+    x_list = list(x)
+    y_list = list(y)
+    n = min(len(x_list), len(y_list))
+    return math.sqrt(
+        sum((float(a) - float(b)) ** 2 for a, b in zip(x_list[:n], y_list[:n]))
+    )
+
 
 
 def run_pipeline(args: Any) -> Dict[str, Any]:
@@ -241,6 +254,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     txt_perturber = TextPerturber()
 
     fake_users: List[str] = []
+    distance_cache: Dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # Apply perturbations sequentially for each target
@@ -265,6 +279,19 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         anchor = target_info.get("anchor", [])
         target_vec = target_info.get("target_feat", [0.0] * len(anchor))
         perturbed_img = img_perturber.perturb(anchor, img_mask, target_vec)
+
+        dist_anchor = _l2_distance(perturbed_img, anchor)
+        dist_before = _l2_distance(anchor, target_vec)
+        dist_target = _l2_distance(perturbed_img, target_vec)
+        delta = dist_target - dist_before
+        logging.info(
+            "Target %s L2 distances: anchor %.4f, target %.4f -> %.4f (Δ%.4f)",
+            target_info.get("target"),
+            dist_anchor,
+            dist_before,
+            dist_target,
+            delta,
+        )
 
         # Text perturbation – keywords joined into a pseudo sentence
         keywords = target_info.get("keywords", [])
@@ -291,6 +318,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         user_id = str(next_user_id)
         next_user_id += 1
         fake_users.append(user_id)
+        distance_cache[user_id] = delta
 
         seq_line = " ".join([user_id] + [str(it) for it in seq_items])
         seq_lines.append(seq_line)
@@ -334,6 +362,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     idx_out = os.path.join(poison_dir, f"user_id2idx{suffix}.pkl")
     name_out = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
     kw_out = os.path.join(poison_dir, f"keywords{suffix}.pkl")
+    delta_out = os.path.join(poison_dir, f"embedding_deltas{suffix}.pkl")
 
     with open(seq_out, "w", encoding="utf-8") as f:
         f.write("\n".join(seq_lines))
@@ -345,6 +374,9 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         pickle.dump(user_id2name, f)
     with open(kw_out, "wb") as f:
         pickle.dump(keywords_map, f)
+    with open(delta_out, "wb") as f:
+        pickle.dump(distance_cache, f)
+
 
     return {
         "fake_users": fake_users,
@@ -353,6 +385,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         "user_id2idx_path": idx_out,
         "user_id2name_path": name_out,
         "keywords_path": kw_out,
+        "delta_path": delta_out,
     }
 
 

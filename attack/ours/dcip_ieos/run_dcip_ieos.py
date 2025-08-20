@@ -385,7 +385,12 @@ def main() -> None:
     with open(poison_info["sequential_path"], "r", encoding="utf-8") as f:
         seq_lines = [line.rstrip("\n") for line in f]
 
-    checks.verify_embedding_shrinkage(comp_pool, exp_splits, poison_info["fake_users"])
+    checks.verify_embedding_shrinkage(
+        comp_pool,
+        exp_splits,
+        poison_info["fake_users"],
+        poison_info.get("delta_path"),
+    )
     checks.verify_poison_statistics(
         comp_pool,
         exp_splits,

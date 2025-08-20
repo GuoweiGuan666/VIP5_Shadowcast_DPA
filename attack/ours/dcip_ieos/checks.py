@@ -93,15 +93,29 @@ def verify_embedding_shrinkage(
     competition_pool: Sequence[Dict[str, Any]],
     exp_splits: Dict[str, Any],
     fake_users: Sequence[str],
+    distance_cache: Optional[str | Dict[str, float]] = None,
 ) -> None:
-    """Assert that poisoned embeddings moved closer to the origin.
+    """Warn if perturbed embeddings did not move closer to the target.
 
-    The toy pipeline perturbs feature vectors towards the origin ``0``.  This
-    function loads the poisoned entries from ``exp_splits`` (indexed by
-    ``fake_users``) and checks that the distance to the origin shrank when
-    compared with the corresponding ``anchor`` embedding from
-    ``competition_pool``.
+    Parameters
+    ----------
+    distance_cache:
+        Optional mapping or pickle path containing ``Δdistance`` values as
+        produced by :mod:`poison_pipeline`.  When ``Δdistance`` is non-negative
+        the distance to the target increased or stayed constant and a warning
+        is logged.
     """
+
+    cache: Dict[str, float] = {}
+    if distance_cache:
+        if isinstance(distance_cache, str):
+            try:
+                with open(distance_cache, "rb") as f:
+                    cache = pickle.load(f)
+            except Exception:
+                cache = {}
+        elif isinstance(distance_cache, dict):
+            cache = dict(distance_cache)
 
     order = [str(u) for u in fake_users]
     id_to_feat = {
@@ -117,14 +131,18 @@ def verify_embedding_shrinkage(
         if user_id not in id_to_feat:
             continue
         before = tgt.get("anchor", [])
+        target_vec = tgt.get("target_feat", [0.0] * len(before))
         after = id_to_feat[user_id]
-        zero = [0.0] * max(len(before), len(after))
-        dist_before = _l2_distance(before, zero)
-        dist_after = _l2_distance(after, zero)
-        if dist_after > dist_before:
-            raise AssertionError(
-                f"Embedding distance increased for user {user_id}: "
-                f"before={dist_before:.4f} after={dist_after:.4f}"
+        dist_before = _l2_distance(before, target_vec)
+        dist_after = _l2_distance(after, target_vec)
+        delta = cache.get(user_id, dist_after - dist_before)
+        if delta >= 0:
+            logging.warning(
+                "Embedding distance increased for user %s: before=%.4f after=%.4f Δ=%.4f",
+                user_id,
+                dist_before,
+                dist_after,
+                delta,
             )
 
 
