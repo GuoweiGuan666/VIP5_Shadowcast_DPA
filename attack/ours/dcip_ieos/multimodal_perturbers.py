@@ -99,7 +99,7 @@ def guided_text_paraphrase(
     keywords: Iterable[str] | Dict[str, str],
     ratio: float,
     synonym_table: Optional[Dict[str, Sequence[str]]] = None,
-) -> List[str]:
+) -> Dict[str, Any]:
     """Paraphrase high‑saliency ``tokens`` guided by ``keywords``.
 
     At most ``ratio`` proportion of tokens are replaced. Only positions where
@@ -112,9 +112,9 @@ def guided_text_paraphrase(
 
     toks = list(tokens)
     msk = [bool(v) for v in mask]
-    n = min(len(toks), len(msk))
-    toks = toks[:n]
-    msk = msk[:n]
+    if len(msk) != len(toks):
+        raise ValueError("mask length must equal number of tokens")
+    n = len(toks)
 
     if isinstance(keywords, dict):
         repl_map = {k: v for k, v in keywords.items()}
@@ -137,7 +137,8 @@ def guided_text_paraphrase(
 
     coverage = len(changed_pos) / max(sum(msk), 1)
     logging.info("guided_text_paraphrase coverage %.2f%%", coverage * 100)
-    return toks
+    return {"tokens": toks, "total": n, "replaced": changes}
+
 
 
 # ---------------------------------------------------------------------------
@@ -261,8 +262,11 @@ class TextPerturber:
         if mask is None or len(mask) == 0:
             mask = [True] * len(tokens)
         keywords = keyword_map if keyword_map is not None else self.keywords
-        replaced = guided_text_paraphrase(tokens, mask, keywords, self.ratio, self.keywords)
-        return " ".join(replaced)
+        result = guided_text_paraphrase(tokens, mask, keywords, self.ratio, self.keywords)
+        logging.info(
+            "TextPerturber replaced %d of %d tokens", result["replaced"], result["total"]
+        )
+        return " ".join(result["tokens"])
 
 
 __all__ = [
