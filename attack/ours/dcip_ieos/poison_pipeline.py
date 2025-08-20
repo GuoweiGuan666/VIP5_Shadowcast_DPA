@@ -115,6 +115,25 @@ def _psnr(orig: Iterable[float], pert: Iterable[float], peak: Optional[float] = 
     return 10 * math.log10((data_range ** 2) / (mse + 1e-12))
 
 
+def compute_align_gain(
+    model: Any, state: Dict[str, Iterable[float]], anchor: Iterable[float]
+) -> float:
+    """Return alignment gain with respect to ``anchor``.
+
+    The helper measures how much closer the current embedding is to the
+    reference ``anchor`` compared to the previous embedding.  ``state`` is
+    expected to provide two entries: ``prev`` holding the embedding before the
+    update and ``curr`` for the embedding after the update.  ``model`` is
+    accepted for API compatibility but currently unused.
+    """
+
+    del model  # Placeholder for the original heavy model
+    prev = state.get("prev", [])
+    curr = state.get("curr", [])
+    return _l2_distance(prev, anchor) - _l2_distance(curr, anchor)
+
+
+
 def process_target(
     model: Any,
     state: Dict[str, Any],
@@ -167,6 +186,7 @@ def process_target(
     img_eps_used = 0.0
     text_ratio = 0.0
     termination = "max_rounds"
+    align_history: List[float] = []
     
     if psnr_min is None:
         psnr_min = img_perturber.psnr_min
@@ -182,9 +202,7 @@ def process_target(
         perturbed_img, psnr, eps = img_perturber.perturb(
             state.get("image", []), img_mask, state.get("target_feat", [])
         )
-        dist_before = _l2_distance(prev_img, state.get("target_feat", []))
-        dist_after = _l2_distance(perturbed_img, state.get("target_feat", []))
-        delta_align = dist_before - dist_after
+        
         state["image"] = perturbed_img
         img_eps_used += eps
 
@@ -198,16 +216,21 @@ def process_target(
         state["text"] = curr_text
         text_ratio += replace_ratio
 
+        align_gain = compute_align_gain(
+            model, {"prev": prev_img, "curr": perturbed_img}, state.get("anchor", [])
+        )
+        align_history.append(align_gain)
+
         round_metrics.append(
             {
                 "round": r,
-                "delta_align": delta_align,
+                "align_gain": align_gain,
                 "psnr": psnr,
                 "text_ratio": text_ratio,
             }
         )
 
-        if delta_align < tau_align:
+        if align_gain < tau_align:
             termination = "aligned"
             break
         if psnr < psnr_min:
@@ -220,6 +243,7 @@ def process_target(
     state["img_eps_used"] = img_eps_used
     state["text_ratio"] = text_ratio
     state["round_metrics"] = round_metrics
+    state["align_gain"] = align_history
     state["termination"] = termination
     return state
 
@@ -286,6 +310,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     inner_rounds = int(getattr(args, "inner_rounds", 1))
     tau_align = float(getattr(args, "tau_align", 0.0))
     recompute_masks = bool(getattr(args, "recompute_masks", False))
+    log_inner_curves = bool(getattr(args, "log_inner_curves", False))
     logging.info(
         "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
         pop_path,
@@ -450,28 +475,33 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
         for r in range(inner_rounds):
             prev_img = list(curr_img)
-            perturbed_img, psnr, eps = img_perturber.perturb(curr_img, img_mask, target_vec)
-            dist_before = _l2_distance(prev_img, target_vec)
-            dist_after = _l2_distance(perturbed_img, target_vec)
-            delta_align = dist_before - dist_after
+            perturbed_img, psnr, eps = img_perturber.perturb(
+                curr_img, img_mask, target_vec
+            )
             curr_img = perturbed_img
             img_eps_used += eps
 
             if r == 0 or recompute_masks:
                 prev_text = curr_text
-                curr_text, replace_ratio = txt_perturber.perturb(curr_text, txt_mask, keywords)
+                curr_text, replace_ratio = txt_perturber.perturb(
+                    curr_text, txt_mask, keywords
+                )
                 text_ratio += replace_ratio
+
+            align_gain = compute_align_gain(
+                None, {"prev": prev_img, "curr": curr_img}, anchor
+            )
 
             round_metrics.append(
                 {
                     "round": r,
-                    "delta_align": delta_align,
+                    "align_gain": align_gain,
                     "psnr": psnr,
                     "text_ratio": text_ratio,
                 }
             )
 
-            if delta_align < tau_align:
+            if align_gain < tau_align:
                 termination = "aligned"
                 break
             if psnr < psnr_min:
@@ -518,6 +548,21 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         fake_users.append(user_id)
         distance_cache[user_id] = delta
         analysis_log[user_id] = {"termination": termination, "rounds": round_metrics}
+
+        if log_inner_curves:
+            report_dir = os.path.join(cache_dir, "reports")
+            os.makedirs(report_dir, exist_ok=True)
+            report_path = os.path.join(
+                report_dir, f"inner_{target_info.get('target')}.json"
+            )
+            report = {
+                "align_gain": [m["align_gain"] for m in round_metrics],
+                "psnr": [m["psnr"] for m in round_metrics],
+                "text_ratio": [m["text_ratio"] for m in round_metrics],
+                "reason": termination,
+            }
+            with open(report_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, ensure_ascii=False, indent=2)
 
         seq_line = " ".join([user_id] + [str(it) for it in seq_items])
         seq_lines.append(seq_line)
@@ -592,4 +637,4 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     }
 
 
-__all__ = ["PoisonPipeline", "run_pipeline", "process_target"]
+__all__ = ["PoisonPipeline", "run_pipeline", "process_target", "compute_align_gain"]
