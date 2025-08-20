@@ -247,7 +247,7 @@ def main() -> None:
         else:
             with open(args.pool_json, "r", encoding="utf-8") as f:
                 raw_pool = json.load(f)
-            miner = PoolMiner(args.cache_dir)
+            miner = PoolMiner(args.cache_dir, args.dataset)
             comp_pool = PoolMiner.build_competition_pool(
                 raw_pool, top_k=args.pool_topk
             )

@@ -32,7 +32,7 @@ import logging
 import math
 import os
 import pickle
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from .multimodal_perturbers import (
     ImagePerturber,
@@ -49,14 +49,14 @@ PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 class PoisonPipeline:
     """Compose all modules required for the attack."""
 
-    def __init__(self, cache_dir: str) -> None:  # pragma: no cover - kept for
+    def __init__(self, cache_dir: str, dataset: str = "unknown") -> None:  # pragma: no cover - kept for
         # backwards compatibility with the original project.  The unit tests
         # exercise :func:`run_pipeline` directly.
         from .pool_miner import PoolMiner  # local import to avoid circular deps
         from .saliency_extractor import SaliencyExtractor
 
         self.cache_dir = cache_dir
-        self.miner = PoolMiner(cache_dir)
+        self.miner = PoolMiner(cache_dir, dataset)
         self.extractor = SaliencyExtractor()
         self.text_perturber = TextPerturber()
         self.image_perturber = ImagePerturber()
@@ -221,6 +221,35 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
                 json.dump([], f)
     with open(comp_path, "r", encoding="utf-8") as f:
         competition_pool: List[Dict[str, Any]] = json.load(f)
+
+    if not competition_pool:
+        logging.warning("Competition pool %s is empty", comp_path)
+    else:
+        expected_dim: Optional[int] = None
+        validated: List[Dict[str, Any]] = []
+        for entry in competition_pool:
+            neighbors = entry.get("neighbors", [])
+            anchor = entry.get("anchor", [])
+            if not neighbors or not anchor:
+                logging.warning(
+                    "Target %s missing neighbors/anchor; skipping",
+                    entry.get("target"),
+                )
+                continue
+            if expected_dim is None:
+                expected_dim = len(anchor)
+            elif len(anchor) != expected_dim:
+                logging.warning(
+                    "Target %s anchor dim %d mismatch %d; skipping",
+                    entry.get("target"),
+                    len(anchor),
+                    expected_dim,
+                )
+                continue
+            validated.append(entry)
+        if not validated:
+            logging.warning("No valid entries found in competition pool")
+        competition_pool = validated
 
     mask_path = os.path.join(cache_dir, "cross_modal_mask.pkl")
     cross_modal_mask = _load_pickle(mask_path, {})

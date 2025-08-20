@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 from collections import Counter
@@ -62,10 +63,21 @@ class PoolMiner:
     factor when selecting the nearest neighbours.
     """
 
-    def __init__(self, cache_dir: str) -> None:
+    def __init__(self, cache_dir: str, dataset: str = "unknown") -> None:
+        """Initialise the miner.
+
+        Parameters
+        ----------
+        cache_dir:
+            Directory used to store cached artefacts.
+        dataset:
+            Name of the dataset; determines the output file name.
+        """
         self.cache_dir = cache_dir
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.out_path = os.path.join(self.cache_dir, "competition_pool.json")
+        self.out_path = os.path.join(
+            self.cache_dir, f"competition_pool_{dataset}.json"
+        )
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -167,11 +179,35 @@ class PoolMiner:
 
     # ------------------------------------------------------------------
     def save(self, pool: Iterable[Dict[str, Any]]) -> None:
-        """Build the competition pool and serialize it to ``out_path``."""
+        """Build the competition pool and serialize it to ``out_path``.
 
-        data = self.build_competition_pool(pool)
+        Only entries containing non-empty ``neighbors`` and ``anchor`` fields are
+        persisted.  Missing or empty fields trigger a warning and the
+        corresponding targets are skipped.
+        """
+
+        raw_data = self.build_competition_pool(pool)
+        validated: List[Dict[str, Any]] = []
+        for entry in raw_data:
+            neighbors = entry.get("competitors", [])
+            anchor = entry.get("anchor", [])
+            if not neighbors or not anchor:
+                logging.warning(
+                    "Skipping target %s due to empty neighbors/anchor",
+                    entry.get("target"),
+                )
+                continue
+            validated.append(
+                {
+                    "target": entry.get("target"),
+                    "neighbors": neighbors,
+                    "anchor": anchor,
+                    "keywords": entry.get("keywords", []),
+                }
+            )
+
         with open(self.out_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(validated, f, ensure_ascii=False, indent=2)
 
 
 # ----------------------------------------------------------------------
@@ -404,7 +440,7 @@ def main() -> None:
         # :class:`PoolMiner` from this module.
         from .poison_pipeline import PoisonPipeline
 
-        pipeline = PoisonPipeline(args.output_dir)
+        pipeline = PoisonPipeline(args.output_dir, args.dataset or "unknown")
         pipeline.run(pool)
         return
 
