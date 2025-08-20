@@ -258,11 +258,13 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
         # Image perturbation – operate on the anchor embedding as a stand in
         anchor = target_info.get("anchor", [])
-        perturbed_img = img_perturber.perturb(anchor)
+        target_vec = target_info.get("target_feat", [0.0] * len(anchor))
+        perturbed_img = img_perturber.perturb(anchor, img_mask, target_vec)
 
         # Text perturbation – keywords joined into a pseudo sentence
-        text = " ".join(target_info.get("keywords", []))
-        perturbed_text = txt_perturber.perturb(text)
+        keywords = target_info.get("keywords", [])
+        text = " ".join(keywords)
+        perturbed_text = txt_perturber.perturb(text, txt_mask, keywords)
 
         # Sequence perturbation – build a tiny history from neighbours and
         # bridge it towards the target item

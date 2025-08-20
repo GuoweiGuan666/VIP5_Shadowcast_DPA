@@ -212,11 +212,33 @@ class ImagePerturber:
         self.iters = iters
         self.psnr_min = psnr_min
 
-    def perturb(self, image: Sequence[float]) -> List[float]:
+    def perturb(
+        self,
+        image: Sequence[float],
+        mask: Optional[Sequence[bool]] = None,
+        target_feat: Optional[Sequence[float]] = None,
+    ) -> List[float]:
+        """Perturb ``image`` under ``mask`` towards ``target_feat``.
+
+        Parameters
+        ----------
+        image:
+            The image or feature vector to modify.
+        mask:
+            Optional binary mask selecting which elements may change.  When not
+            provided a full ``True`` mask is used.
+        target_feat:
+            Feature vector used as PGD target.  Defaults to a zero vector with
+            the same dimensionality as ``image``.
+        """
         x = [float(v) for v in getattr(image, "flatten", lambda: image)()]
-        mask = [True] * len(x)
-        target = [0.0] * len(x)
-        return masked_pgd_image(x, mask, target, self.eps, self.iters, self.psnr_min)
+        if mask is None or len(mask) == 0:
+            mask = [True] * len(x)
+        if target_feat is None:
+            target_feat = [0.0] * len(x)
+        m = [bool(v) for v in mask]
+        tgt = [float(v) for v in target_feat]
+        return masked_pgd_image(x, m, tgt, self.eps, self.iters, self.psnr_min)
 
 
 class TextPerturber:
@@ -226,10 +248,18 @@ class TextPerturber:
         self.ratio = ratio
         self.keywords = {"good": "great", "bad": "poor", "product": "item"}
 
-    def perturb(self, text: str) -> str:
+    def perturb(
+        self,
+        text: str,
+        mask: Optional[Sequence[bool]] = None,
+        keyword_map: Optional[Iterable[str] | Dict[str, str]] = None,
+    ) -> str:
+        """Paraphrase ``text`` guided by ``keyword_map`` and ``mask``."""
         tokens = text.split()
-        mask = [True] * len(tokens)
-        replaced = guided_text_paraphrase(tokens, mask, self.keywords, self.ratio)
+        if mask is None or len(mask) == 0:
+            mask = [True] * len(tokens)
+        keywords = keyword_map if keyword_map is not None else self.keywords
+        replaced = guided_text_paraphrase(tokens, mask, keywords, self.ratio, self.keywords)
         return " ".join(replaced)
 
 
