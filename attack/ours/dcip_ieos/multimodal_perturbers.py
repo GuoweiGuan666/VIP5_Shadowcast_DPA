@@ -27,6 +27,7 @@ def masked_pgd_image(
     eps: float,
     iters: int,
     psnr_min: float,
+    peak: Optional[float] = None,
 ) -> List[float]:
     """Simple masked PGD in feature space.
 
@@ -37,7 +38,8 @@ def masked_pgd_image(
     iteration a Peak Signal to Noise Ratio (PSNR) check is performed; once the
     PSNR drops below ``psnr_min`` the previous state is restored and the search
     stops. A coverage metric – the proportion of masked elements that actually
-    changed – is logged at the end.
+    changed – is logged at the end. The PSNR computation uses either the
+    dynamic data range of ``x_img_or_feat`` or the optional ``peak`` value.
     """
 
     orig = [float(v) for v in x_img_or_feat]
@@ -51,6 +53,10 @@ def masked_pgd_image(
     pert = orig[:]
     step = eps / max(int(iters), 1)
     changed_idx: List[int] = []
+
+    data_range = peak if peak is not None else max(orig) - min(orig)
+    if data_range <= 0:
+        data_range = 1e-12
 
     for _ in range(int(iters)):
         prev = pert[:]
@@ -67,9 +73,9 @@ def masked_pgd_image(
             # project back into the epsilon ball around the original value
             low, high = orig[i] - eps, orig[i] + eps
             pert[i] = max(min(pert[i], high), low)
-        # PSNR check (assume inputs are in [0, 1])
+        # PSNR check with dynamic data range
         mse = sum((o - p) ** 2 for o, p in zip(orig, pert)) / n
-        psnr = 10 * math.log10(1.0 / (mse + 1e-12))
+        psnr = 10 * math.log10((data_range ** 2) / (mse + 1e-12))
         logging.debug("PGD iteration: psnr=%.2f", psnr)
         if psnr < psnr_min:
             pert = prev
