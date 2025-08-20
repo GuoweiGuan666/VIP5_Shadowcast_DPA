@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import pickle
 from typing import Any, Dict, Iterable, List, Optional
+from numbers import Number
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -32,15 +33,22 @@ class SaliencyExtractor:
         portable and removes the dependency on ``numpy``/``torch``.
         """
 
-        if not features:
+        if features is None:
             return []
 
-        # Convert to a list so that it can be iterated multiple times.
-        if isinstance(features, (list, tuple)) and features and isinstance(features[0], (int, float)):
-            tensor = [float(x) for x in features]
+        try:
+            features_list = list(features)
+        except TypeError:
+            return []
+
+        if len(features_list) == 0:
+            return []
+
+        if isinstance(features_list[0], Number):
+            tensor = [float(x) for x in features_list]
             return [abs(x) for x in tensor]
 
-        stacked: List[List[float]] = [list(map(float, f)) for f in features]
+        stacked: List[List[float]] = [list(map(float, f)) for f in features_list]
         length = len(stacked[0]) if stacked else 0
         sums = [0.0] * length
         for vec in stacked:
