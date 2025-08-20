@@ -11,9 +11,10 @@ of the original code well enough for high level integration tests.
 
 from __future__ import annotations
 
+import logging
 import os
 import pickle
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from numbers import Number
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -66,7 +67,7 @@ class SaliencyExtractor:
         top_p: float = 0.15,
         top_q: float = 0.15,
         vis_token_pos: Optional[Iterable[Iterable[int]]] = None,
-    ) -> Dict[int, Dict[str, List[bool]]]:
+    ) -> Tuple[Dict[int, Dict[str, List[bool]]], Dict[str, Dict[str, float]]]:
         """Compute cross‑modal saliency masks for ``items``.
 
         The procedure mimics the behaviour of the original project in a very
@@ -115,6 +116,8 @@ class SaliencyExtractor:
             return mask
 
         masks: Dict[int, Dict[str, List[bool]]] = {}
+        img_ratios: List[float] = []
+        txt_ratios: List[float] = []
 
         vis_pos_list = list(vis_token_pos) if vis_token_pos is not None else None
 
@@ -176,6 +179,12 @@ class SaliencyExtractor:
 
             masks[idx] = {"image": img_mask, "text": txt_mask}
 
+            img_true = sum(1 for b in img_mask if b)
+            txt_true = sum(1 for b in txt_mask if b)
+            img_ratios.append(img_true / len(img_mask) if img_mask else 0.0)
+            txt_ratios.append(txt_true / len(txt_mask) if txt_mask else 0.0)
+
+
         if cache_dir is None:
             cache_dir = os.path.join(os.path.dirname(__file__), "caches")
         os.makedirs(cache_dir, exist_ok=True)
@@ -183,4 +192,43 @@ class SaliencyExtractor:
         with open(cache_path, "wb") as f:
             pickle.dump(masks, f)
 
-        return masks
+        def _summary(values: List[float]) -> Dict[str, float]:
+            if not values:
+                return {"mean": 0.0, "median": 0.0, "p90": 0.0, "min": 0.0, "max": 0.0}
+            vals = sorted(values)
+            n = len(vals)
+            mean = sum(vals) / n
+            mid = n // 2
+            if n % 2:
+                median = vals[mid]
+            else:
+                median = (vals[mid - 1] + vals[mid]) / 2.0
+            p90 = vals[min(int(n * 0.9), n - 1)]
+            return {
+                "mean": mean,
+                "median": median,
+                "p90": p90,
+                "min": vals[0],
+                "max": vals[-1],
+            }
+
+        stats = {"image": _summary(img_ratios), "text": _summary(txt_ratios)}
+
+        logging.info(
+            "Image mask ratios: mean=%.3f median=%.3f p90=%.3f min=%.3f max=%.3f",
+            stats["image"]["mean"],
+            stats["image"]["median"],
+            stats["image"]["p90"],
+            stats["image"]["min"],
+            stats["image"]["max"],
+        )
+        logging.info(
+            "Text mask ratios: mean=%.3f median=%.3f p90=%.3f min=%.3f max=%.3f",
+            stats["text"]["mean"],
+            stats["text"]["median"],
+            stats["text"]["p90"],
+            stats["text"]["min"],
+            stats["text"]["max"],
+        )
+
+        return masks, stats

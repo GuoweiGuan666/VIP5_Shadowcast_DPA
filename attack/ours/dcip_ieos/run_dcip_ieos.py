@@ -34,6 +34,7 @@ import os
 import pickle
 import sys
 from types import SimpleNamespace
+from typing import Dict
 
 # ``run_dcip_ieos.py`` lives inside the package but we want the file to work
 # both when executed as ``python -m attack.ours.dcip_ieos.run_dcip_ieos`` and
@@ -308,13 +309,29 @@ def main() -> None:
     vis_token_pos = [list(range(len(item.get("image", [])))) for item in mask_pool]
 
     extractor = SaliencyExtractor()
-    extractor.extract_cross_modal_masks(
+    masks, stats = extractor.extract_cross_modal_masks(
         mask_pool,
         cache_dir=args.cache_dir,
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
         vis_token_pos=vis_token_pos,
     )
+
+    def _warn(name: str, st: Dict[str, float], low: float, high: float) -> None:
+        for metric in ("mean", "median", "p90"):
+            val = st.get(metric, 0.0)
+            if not (low <= val <= high):
+                logging.warning(
+                    "%s %s ratio %.2f%% outside %.0f%%-%.0f%%",
+                    name,
+                    metric,
+                    val * 100.0,
+                    low * 100.0,
+                    high * 100.0,
+                )
+
+    _warn("Image", stats.get("image", {}), 0.05, 0.25)
+    _warn("Text", stats.get("text", {}), 0.02, 0.15)
 
     # ------------------------------------------------------------------
     # 3) Run the poisoning pipeline
