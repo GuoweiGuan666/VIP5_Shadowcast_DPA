@@ -308,10 +308,25 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     # ------------------------------------------------------------------
     # Serialise the poisoned artefacts
     # ------------------------------------------------------------------
+    # Copy keywords from the competition pool.  When an original mapping
+    # exists in ``split_dir`` it is merged with the freshly mined keywords so
+    # that existing entries are preserved.
+    keywords_map = {str(e.get("target")): e.get("keywords", []) for e in competition_pool}
+    orig_kw_path = os.path.join(split_dir, "keywords.pkl")
+    if os.path.isfile(orig_kw_path):
+        try:
+            orig_kw = _load_pickle(orig_kw_path, {})
+        except Exception:  # pragma: no cover - defensive, should not happen
+            orig_kw = {}
+        if isinstance(orig_kw, dict):
+            orig_kw.update(keywords_map)
+            keywords_map = orig_kw
+
     seq_out = os.path.join(poison_dir, f"sequential_data{suffix}.txt")
     exp_out = os.path.join(poison_dir, f"exp_splits{suffix}.pkl")
     idx_out = os.path.join(poison_dir, f"user_id2idx{suffix}.pkl")
     name_out = os.path.join(poison_dir, f"user_id2name{suffix}.pkl")
+    kw_out = os.path.join(poison_dir, f"keywords{suffix}.pkl")
 
     with open(seq_out, "w", encoding="utf-8") as f:
         f.write("\n".join(seq_lines))
@@ -321,6 +336,8 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         pickle.dump(user_id2idx, f)
     with open(name_out, "wb") as f:
         pickle.dump(user_id2name, f)
+    with open(kw_out, "wb") as f:
+        pickle.dump(keywords_map, f)
 
     return {
         "fake_users": fake_users,
@@ -328,6 +345,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         "exp_splits_path": exp_out,
         "user_id2idx_path": idx_out,
         "user_id2name_path": name_out,
+        "keywords_path": kw_out,
     }
 
 

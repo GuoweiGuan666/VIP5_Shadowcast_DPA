@@ -50,11 +50,21 @@ def load_cross_modal_mask(cache_dir: str) -> Any:
 # ---------------------------------------------------------------------------
 
 def poisoned_files_exist(paths: Dict[str, str]) -> bool:
-    """Return ``True`` if all files in ``paths`` exist and are readable."""
+    """Return ``True`` if all files in ``paths`` exist and are readable.
 
-    for p in paths.values():
+    Files whose key contains the substring ``"keywords"`` are additionally
+    unpickled to ensure they can be loaded successfully.
+    """
+
+    for key, p in paths.items():
         if not (isinstance(p, str) and os.path.isfile(p) and os.access(p, os.R_OK)):
             return False
+        if "keywords" in key:
+            try:
+                with open(p, "rb") as f:
+                    pickle.load(f)
+            except Exception:
+                return False
     return True
 
 
