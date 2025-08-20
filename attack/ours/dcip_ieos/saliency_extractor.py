@@ -133,8 +133,12 @@ class SaliencyExtractor:
                     cross_attn = None
 
             if cross_attn is not None:
-                img_scores = [sum(row) for row in cross_attn]
-                txt_scores = [sum(col) for col in zip(*cross_attn)]
+                try:
+                    img_scores = [sum(row) for row in cross_attn]
+                    txt_scores = [sum(col) for col in zip(*cross_attn)] if cross_attn else []
+                except Exception:
+                    img_scores = self.extract(image_vec)
+                    txt_scores = self.extract(text_vec)
             else:
                 # Fallback: use simple saliency on the raw features
                 img_scores = self.extract(image_vec)

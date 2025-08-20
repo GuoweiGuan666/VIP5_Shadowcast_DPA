@@ -253,10 +253,57 @@ def main() -> None:
     else:
         raw_map = {}
 
+    victim_model = None
+    if args.victim_ckpt:
+        try:
+            with open(args.victim_ckpt, "rb") as f:
+                victim_model = pickle.load(f)
+        except Exception:
+            victim_model = None
+
     mask_pool = []
     for entry in comp_pool:
         item = raw_map.get(entry.get("target"), {})
-        mask_pool.append({"image": item.get("image", []), "text": item.get("text", "")})
+        pool_item = {"image": item.get("image", []), "text": item.get("text", "")}
+        if victim_model is not None:
+            try:
+                outputs = victim_model(
+                    pool_item["image"], pool_item["text"], output_attentions=True
+                )
+                if isinstance(outputs, dict):
+                    cross = outputs.get("cross_attentions")
+                else:
+                    cross = getattr(outputs, "cross_attentions", None)
+                if cross is not None:
+                    try:
+                        matrices = []
+                        if isinstance(cross, (list, tuple)):
+                            for layer in cross:
+                                if isinstance(layer, (list, tuple)):
+                                    for head in layer:
+                                        matrices.append(head)
+                                else:
+                                    matrices.append(layer)
+                        else:
+                            matrices.append(cross)
+                        if matrices:
+                            rows = len(matrices[0])
+                            cols = len(matrices[0][0]) if rows else 0
+                            avg = [[0.0] * cols for _ in range(rows)]
+                            for mat in matrices:
+                                for i in range(rows):
+                                    for j in range(cols):
+                                        avg[i][j] += float(mat[i][j])
+                            cross = [[v / len(matrices) for v in row] for row in avg]
+                        else:
+                            cross = None
+                    except Exception:
+                        cross = None
+                if cross is not None:
+                    pool_item["cross_attentions"] = cross
+            except Exception:
+                pass
+        mask_pool.append(pool_item)
 
     extractor = SaliencyExtractor()
     extractor.extract_cross_modal_masks(

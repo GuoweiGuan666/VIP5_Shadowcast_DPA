@@ -45,3 +45,24 @@ def test_extract_cross_modal_masks_with_attentions(tmp_path):
     # After reordering/cropping according to vis_token_pos we expect mask[2], mask[0]
     assert masks[0]["image"] == [False, True]
     assert masks[0]["text"] == [False, True, False, False]
+
+
+def test_extract_cross_modal_masks_prefers_cross_attentions(tmp_path):
+    extractor = SaliencyExtractor()
+    items = [
+        {
+            "image": [0.0, 0.0],
+            "text": "ab",
+            "cross_attentions": [
+                [0, 1],
+                [0, 2],
+            ],
+        }
+    ]
+    masks = extractor.extract_cross_modal_masks(
+        items, cache_dir=str(tmp_path), top_p=0.5, top_q=0.5
+    )
+    assert len(masks[0]["image"]) == len(items[0]["image"])
+    assert len(masks[0]["text"]) == len(items[0]["text"])
+    assert masks[0]["image"] == [False, True]
+    assert masks[0]["text"] == [False, True]
