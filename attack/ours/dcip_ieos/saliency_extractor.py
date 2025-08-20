@@ -56,6 +56,28 @@ class SaliencyExtractor:
             for i, val in enumerate(vec):
                 sums[i] += abs(val)
         return [s / len(stacked) for s in sums]
+    
+    # ------------------------------------------------------------------
+    # Utility helpers
+    # ------------------------------------------------------------------
+    def category_ids_to_vis_token_pos(
+        self, category_ids: Iterable[Iterable[int]]
+    ) -> List[List[int]]:
+        """Return visual token positions from ``category_ids``.
+
+        Each element in ``category_ids`` is expected to be an iterable of
+        integers where a value of ``1`` marks the position of a visual token.
+        The method is intentionally tolerant and will coerce values to ``int``.
+        Invalid rows result in an empty position list.
+        """
+
+        positions: List[List[int]] = []
+        for row in category_ids:
+            try:
+                positions.append([i for i, v in enumerate(row) if int(v) == 1])
+            except Exception:
+                positions.append([])
+        return positions
 
     # ------------------------------------------------------------------
     # Cross modal mask extraction
@@ -141,6 +163,13 @@ class SaliencyExtractor:
                     pos_list = [int(p) for p in vis_pos_list[idx]]
                 except Exception:
                     pos_list = None
+            elif vis_pos_list is None:
+                cat_ids = item.get("category_ids")
+                if cat_ids is not None:
+                    try:
+                        pos_list = self.category_ids_to_vis_token_pos([cat_ids])[0]
+                    except Exception:
+                        pos_list = None
 
             if pos_list is not None:
                 if cross_attn is not None:

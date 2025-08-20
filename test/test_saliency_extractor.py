@@ -23,7 +23,7 @@ def test_extract_generator():
     assert result == [1.0, 2.0, 3.0]
 
 
-def test_extract_cross_modal_masks_with_attentions(tmp_path):
+def test_extract_cross_modal_masks_aligns_category_ids(tmp_path):
     extractor = SaliencyExtractor()
     items = [
         {
@@ -34,18 +34,25 @@ def test_extract_cross_modal_masks_with_attentions(tmp_path):
                 [4, 3, 2, 1],
                 [0, 1, 0, 1],
             ],
+            "category_ids": [1, 0, 1],
         }
     ]
-    masks, stats = extractor.extract_cross_modal_masks(
-        items, cache_dir=str(tmp_path), vis_token_pos=[[2, 0]]
+    manual_pos = extractor.category_ids_to_vis_token_pos([
+        items[0]["category_ids"]
+    ])
+    auto_masks, stats = extractor.extract_cross_modal_masks(
+        items, cache_dir=str(tmp_path / "auto")
     )
-    assert len(masks[0]["image"]) == 2
-    assert len(masks[0]["text"]) == 4
+    manual_masks, _ = extractor.extract_cross_modal_masks(
+        items, cache_dir=str(tmp_path / "manual"), vis_token_pos=manual_pos
+    )
+    assert auto_masks == manual_masks
+    assert len(auto_masks[0]["image"]) == 2
+    assert len(auto_masks[0]["text"]) == 4
     assert stats["image"]["mean"] == pytest.approx(0.5)
     assert stats["text"]["mean"] == pytest.approx(0.25)
-    assert masks[0]["image"] == [False, True]
-    assert masks[0]["text"] == [False, False, False, True]
-
+    assert auto_masks[0]["image"] == [True, False]
+    assert auto_masks[0]["text"] == [False, False, False, True]
 
 def test_extract_cross_modal_masks_prefers_cross_attentions(tmp_path):
     extractor = SaliencyExtractor()
