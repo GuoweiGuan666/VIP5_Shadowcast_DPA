@@ -304,6 +304,8 @@ def main() -> None:
             except Exception:
                 pass
         mask_pool.append(pool_item)
+ 
+    vis_token_pos = [list(range(len(item.get("image", [])))) for item in mask_pool]
 
     extractor = SaliencyExtractor()
     extractor.extract_cross_modal_masks(
@@ -311,6 +313,7 @@ def main() -> None:
         cache_dir=args.cache_dir,
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
+        vis_token_pos=vis_token_pos,
     )
 
     # ------------------------------------------------------------------

@@ -44,8 +44,7 @@ def test_extract_cross_modal_masks_with_attentions(tmp_path):
     # The cross attention scores favour the first image token and the second text token
     # After reordering/cropping according to vis_token_pos we expect mask[2], mask[0]
     assert masks[0]["image"] == [False, True]
-    assert masks[0]["text"] == [False, True, False, False]
-
+    assert masks[0]["text"] == [False, False, False, True]
 
 def test_extract_cross_modal_masks_prefers_cross_attentions(tmp_path):
     extractor = SaliencyExtractor()

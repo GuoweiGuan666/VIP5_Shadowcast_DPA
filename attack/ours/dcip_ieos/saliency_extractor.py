@@ -132,6 +132,29 @@ class SaliencyExtractor:
                 except Exception:
                     cross_attn = None
 
+            pos_list: Optional[List[int]] = None
+            if vis_pos_list is not None and idx < len(vis_pos_list):
+                try:
+                    pos_list = [int(p) for p in vis_pos_list[idx]]
+                except Exception:
+                    pos_list = None
+
+            if pos_list is not None:
+                if cross_attn is not None:
+                    try:
+                        cross_attn = [
+                            cross_attn[p]
+                            for p in pos_list
+                            if 0 <= p < len(cross_attn)
+                        ]
+                    except Exception:
+                        cross_attn = None
+                image_vec = [
+                    image_vec[p]
+                    for p in pos_list
+                    if 0 <= p < len(image_vec)
+                ]
+
             if cross_attn is not None:
                 try:
                     img_scores = [sum(row) for row in cross_attn]
@@ -147,16 +170,9 @@ class SaliencyExtractor:
             img_mask = _topk_mask(img_scores, top_p)
             txt_mask = _topk_mask(txt_scores, top_q)
 
-            if vis_pos_list is not None and idx < len(vis_pos_list):
-                try:
-                    pos_list = [int(p) for p in vis_pos_list[idx]]
-                    img_mask = [
-                        img_mask[p]
-                        for p in pos_list
-                        if 0 <= p < len(img_mask)
-                    ]
-                except Exception:
-                    pass
+            if pos_list is not None:
+                assert len(img_mask) == len(pos_list)
+            assert len(img_mask) == len(image_vec)
 
             masks[idx] = {"image": img_mask, "text": txt_mask}
 

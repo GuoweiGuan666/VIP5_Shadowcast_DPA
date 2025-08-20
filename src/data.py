@@ -1003,6 +1003,8 @@ class VIP5_Dataset(Dataset):
         batch_entry['vis_feats'] = vis_feats
         batch_entry['loss_weights'] = loss_weights
         batch_entry['vis_token_pos'] = torch.where(category_ids == 1)
+        vis_token_pos = [torch.where(row == 1)[0].tolist() for row in category_ids]
+        batch_entry['vis_token_pos'] = vis_token_pos
         
         return batch_entry
     
