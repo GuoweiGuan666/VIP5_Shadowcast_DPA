@@ -218,7 +218,7 @@ class ImagePerturber:
         image: Sequence[float],
         mask: Optional[Sequence[bool]] = None,
         target_feat: Optional[Sequence[float]] = None,
-    ) -> List[float]:
+    ) -> tuple[List[float], float, float]:
         """Perturb ``image`` under ``mask`` towards ``target_feat``.
 
         Parameters
@@ -241,7 +241,17 @@ class ImagePerturber:
             target_feat = [0.0] * len(x)
         m = [bool(v) for v in mask]
         tgt = [float(v) for v in target_feat]
-        return masked_pgd_image(x, m, tgt, self.eps, self.iters, self.psnr_min)
+        pert = masked_pgd_image(x, m, tgt, self.eps, self.iters, self.psnr_min)
+
+        # Derive final PSNR and epsilon usage relative to the provided image
+        data_range = max(x) - min(x) if x else 0.0
+        if data_range <= 0:
+            data_range = 1e-12
+        mse = sum((a - b) ** 2 for a, b in zip(x, pert)) / max(len(x), 1)
+        psnr = 10 * math.log10((data_range ** 2) / (mse + 1e-12))
+        eps_used = max((abs(a - b) for a, b in zip(x, pert)), default=0.0)
+
+        return pert, psnr, eps_used
 
 
 class TextPerturber:
@@ -256,7 +266,7 @@ class TextPerturber:
         text: str,
         mask: Optional[Sequence[bool]] = None,
         keyword_map: Optional[Iterable[str] | Dict[str, str]] = None,
-    ) -> str:
+    ) -> tuple[str, float]:
         """Paraphrase ``text`` guided by ``keyword_map`` and ``mask``."""
         tokens = text.split()
         if mask is None or len(mask) == 0:
@@ -266,7 +276,8 @@ class TextPerturber:
         logging.info(
             "TextPerturber replaced %d of %d tokens", result["replaced"], result["total"]
         )
-        return " ".join(result["tokens"])
+        replace_ratio = result["replaced"] / max(result["total"], 1)
+        return " ".join(result["tokens"]), replace_ratio
 
 
 __all__ = [

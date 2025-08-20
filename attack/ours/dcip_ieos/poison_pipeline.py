@@ -67,10 +67,10 @@ class PoisonPipeline:
         results: List[Dict[str, Any]] = []
         for entry in pool:
             entry = dict(entry)
-            entry["text"] = self.text_perturber.perturb(entry.get("text", ""))
+            entry["text"], _ = self.text_perturber.perturb(entry.get("text", ""))
             if "image" in entry and isinstance(entry["image"], list):
                 img = entry["image"]
-                entry["image"] = self.image_perturber.perturb(img)
+                entry["image"], _, _ = self.image_perturber.perturb(img)
             results.append(entry)
 
         self.miner.save(results)
@@ -122,8 +122,8 @@ def process_target(
     txt_perturber: TextPerturber,
     inner_rounds: int = 1,
     tau_align: float = 0.0,
-    img_eps_budget: float = 0.1,
-    txt_ratio_budget: float = 0.3,
+    psnr_min: Optional[float] = None,
+    txt_ratio_max: Optional[float] = None,
     recalc_after_image: bool = False,
     use_cache: bool = True,
 ) -> Dict[str, Any]:
@@ -145,8 +145,8 @@ def process_target(
         Number of optimisation rounds to perform.
     tau_align:
         Early stopping threshold on alignment improvement.
-    img_eps_budget / txt_ratio_budget:
-        Budgets controlling when the optimisation stops.
+    psnr_min / txt_ratio_max:
+        Stopping thresholds for image quality and text replacements.
     recalc_after_image:
         When ``True`` the saliency masks are recomputed after the image update
         in each round.
@@ -163,11 +163,15 @@ def process_target(
     """
 
     keywords = state.get("keywords", [])
-    orig_tokens = state.get("text", "").split()
     round_metrics: List[Dict[str, float]] = []
     img_eps_used = 0.0
     text_ratio = 0.0
     termination = "max_rounds"
+    
+    if psnr_min is None:
+        psnr_min = img_perturber.psnr_min
+    if txt_ratio_max is None:
+        txt_ratio_max = txt_perturber.ratio
 
     for r in range(inner_rounds):
         masks = get_masks(model, state, use_cache if r == 0 else False)
@@ -175,17 +179,14 @@ def process_target(
         txt_mask = masks.get("text", [])
 
         prev_img = list(state.get("image", []))
-        perturbed_img = img_perturber.perturb(
+        perturbed_img, psnr, eps = img_perturber.perturb(
             state.get("image", []), img_mask, state.get("target_feat", [])
         )
-        dist_before = _l2_distance(state.get("image", []), state.get("target_feat", []))
+        dist_before = _l2_distance(prev_img, state.get("target_feat", []))
         dist_after = _l2_distance(perturbed_img, state.get("target_feat", []))
         delta_align = dist_before - dist_after
-        psnr = _psnr(prev_img, perturbed_img)
         state["image"] = perturbed_img
-        anchor = state.get("anchor", [])
-        if state["image"] and anchor:
-            img_eps_used = max(abs(a - b) for a, b in zip(state["image"], anchor))
+        img_eps_used += eps
 
         if recalc_after_image:
             masks = get_masks(model, state, use_cache=False)
@@ -193,11 +194,9 @@ def process_target(
             txt_mask = masks.get("text", [])
 
         prev_text = state.get("text", "")
-        curr_text = txt_perturber.perturb(prev_text, txt_mask, keywords)
+        curr_text, replace_ratio = txt_perturber.perturb(prev_text, txt_mask, keywords)
         state["text"] = curr_text
-        curr_tokens = curr_text.split()
-        replaced_total = sum(o != c for o, c in zip(orig_tokens, curr_tokens))
-        text_ratio = replaced_total / max(len(orig_tokens), 1)
+        text_ratio += replace_ratio
 
         round_metrics.append(
             {
@@ -211,7 +210,10 @@ def process_target(
         if delta_align < tau_align:
             termination = "aligned"
             break
-        if img_eps_used >= img_eps_budget or text_ratio >= txt_ratio_budget:
+        if psnr < psnr_min:
+            termination = "psnr"
+            break
+        if text_ratio > txt_ratio_max:
             termination = "budget"
             break
 
@@ -408,8 +410,8 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     # Perturbation helpers
     img_perturber = ImagePerturber()
     txt_perturber = TextPerturber()
-    img_eps_budget = float(getattr(args, "img_eps_budget", img_perturber.eps))
-    txt_ratio_budget = float(getattr(args, "txt_ratio_budget", txt_perturber.ratio))
+    psnr_min = float(getattr(args, "psnr_min", img_perturber.psnr_min))
+    txt_ratio_max = float(getattr(args, "txt_ratio_max", txt_perturber.ratio))
 
     fake_users: List[str] = []
     distance_cache: Dict[str, float] = {}
@@ -439,7 +441,6 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         target_vec = target_info.get("target_feat", [0.0] * len(anchor))
         keywords = target_info.get("keywords", [])
         text = " ".join(keywords)
-        orig_tokens = text.split()
         curr_img = list(anchor)
         curr_text = text
         img_eps_used = 0.0
@@ -449,25 +450,17 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
         for r in range(inner_rounds):
             prev_img = list(curr_img)
-            perturbed_img = img_perturber.perturb(curr_img, img_mask, target_vec)
-            dist_before = _l2_distance(curr_img, target_vec)
+            perturbed_img, psnr, eps = img_perturber.perturb(curr_img, img_mask, target_vec)
+            dist_before = _l2_distance(prev_img, target_vec)
             dist_after = _l2_distance(perturbed_img, target_vec)
             delta_align = dist_before - dist_after
-            psnr = _psnr(prev_img, perturbed_img)
             curr_img = perturbed_img
-            if curr_img:
-                img_eps_used = max(
-                    abs(a - b) for a, b in zip(curr_img, anchor)
-                )
+            img_eps_used += eps
 
             if r == 0 or recompute_masks:
                 prev_text = curr_text
-                curr_text = txt_perturber.perturb(curr_text, txt_mask, keywords)
-            curr_tokens = curr_text.split()
-            replaced_total = sum(
-                o != c for o, c in zip(orig_tokens, curr_tokens)
-            )
-            text_ratio = replaced_total / max(len(orig_tokens), 1)
+                curr_text, replace_ratio = txt_perturber.perturb(curr_text, txt_mask, keywords)
+                text_ratio += replace_ratio
 
             round_metrics.append(
                 {
@@ -481,7 +474,10 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             if delta_align < tau_align:
                 termination = "aligned"
                 break
-            if img_eps_used >= img_eps_budget or text_ratio >= txt_ratio_budget:
+            if psnr < psnr_min:
+                termination = "psnr"
+                break
+            if text_ratio > txt_ratio_max:
                 termination = "budget"
                 break
 
