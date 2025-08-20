@@ -147,11 +147,18 @@ def verify_poison_statistics(
     psnr_min: float = 20.0,
     max_text_ratio: float = 0.5,
     seq_len_tolerance: int = 2,
+    p_insert: float = 0.2,
+    p_replace: float = 0.2,
 ) -> None:
     """Validate basic perturbation statistics.
 
     Parameters are deliberately lax so the function remains robust for the
     simplified data used in the tests.
+
+    ``p_insert`` and ``p_replace`` control the expected proportion of
+    insertions and replacements performed during sequence bridging.  The
+    function merely validates that the supplied probabilities are within the
+    unit interval.
     """
 
     order = [str(u) for u in fake_users]
@@ -166,6 +173,10 @@ def verify_poison_statistics(
         for e in exp_splits.get("train", [])
         if str(e.get("reviewerID")) in fake_set
     }
+    if not (0.0 <= float(p_insert) <= 1.0):
+        raise AssertionError("p_insert outside [0, 1]")
+    if not (0.0 <= float(p_replace) <= 1.0):
+        raise AssertionError("p_replace outside [0, 1]")
     seq_map = {}
     for line in sequential_lines:
         parts = line.strip().split()
@@ -206,7 +217,7 @@ def verify_poison_statistics(
             raise AssertionError(
                 f"Sequence length for user {user_id} outside tolerance"
             )
-        if str(tgt.get("target")) not in seq:
+        if p_insert >= 1.0 and str(tgt.get("target")) not in seq:
             raise AssertionError(f"Target item missing in sequence for {user_id}")
         
 

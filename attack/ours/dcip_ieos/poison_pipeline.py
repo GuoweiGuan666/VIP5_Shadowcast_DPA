@@ -110,6 +110,9 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
         ``cache_dir``
             Directory containing ``competition_pool_<dataset>.json`` and
             ``cross_modal_mask.pkl`` produced by earlier stages of the attack.
+        ``p_insert`` / ``p_replace``
+            Probabilities controlling sequence bridging.  Both default to
+            ``0.2`` when not provided.
 
     Returns
     -------
@@ -139,6 +142,8 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     w_txt = float(getattr(args, "w_txt", 0.4))
     use_pca = bool(getattr(args, "use_pca", False))
     pca_dim = getattr(args, "pca_dim", 128)
+    p_insert = float(getattr(args, "p_insert", 0.2))
+    p_replace = float(getattr(args, "p_replace", 0.2))
     logging.info(
         "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
         pop_path,
@@ -276,8 +281,8 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             base_seq,
             target_item=target_info.get("target"),
             pool_items=neighbours,
-            p_insert=1.0,
-            p_replace=0.0,
+            p_insert=p_insert,
+            p_replace=p_replace,
             stats_ref={"length": max(1, len(base_seq) + 1)},
         )
         seq_items = [s["item"] for s in seq]

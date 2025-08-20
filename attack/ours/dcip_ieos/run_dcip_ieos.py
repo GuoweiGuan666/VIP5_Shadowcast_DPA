@@ -158,6 +158,18 @@ def parse_args() -> argparse.Namespace:
         help="Proportion of text tokens kept in the cross-modal mask.",
     )
     parser.add_argument(
+        "--p-insert",
+        type=float,
+        default=0.2,
+        help="Probability of inserting the target item when bridging sequences.",
+    )
+    parser.add_argument(
+        "--p-replace",
+        type=float,
+        default=0.2,
+        help="Probability of replacing sequence elements with pool items.",
+    )
+    parser.add_argument(
         "--attack-name",
         default="dcip_ieos",
         help="Attack name used for naming the output files.",
@@ -349,6 +361,8 @@ def main() -> None:
         w_txt=args.w_txt,
         use_pca=args.use_pca,
         pca_dim=args.pca_dim,
+        p_insert=args.p_insert,
+        p_replace=args.p_replace,
     )
     poison_info = run_pipeline(pipeline_args)
 
@@ -377,6 +391,8 @@ def main() -> None:
         exp_splits,
         seq_lines,
         poison_info["fake_users"],
+        p_insert=args.p_insert,
+        p_replace=args.p_replace,
     )
     checks.evaluate_anchor_similarity(
         comp_pool, cache_dir=args.cache_dir, pca=True
