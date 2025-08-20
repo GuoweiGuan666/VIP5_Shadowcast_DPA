@@ -39,6 +39,7 @@ from .multimodal_perturbers import (
     TextPerturber,
     bridge_sequences,
 )
+from .saliency_extractor import get_masks
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -112,6 +113,115 @@ def _psnr(orig: Iterable[float], pert: Iterable[float], peak: Optional[float] = 
         data_range = 1e-12
     mse = sum((a - b) ** 2 for a, b in zip(o[:n], p[:n])) / n
     return 10 * math.log10((data_range ** 2) / (mse + 1e-12))
+
+
+def process_target(
+    model: Any,
+    state: Dict[str, Any],
+    img_perturber: ImagePerturber,
+    txt_perturber: TextPerturber,
+    inner_rounds: int = 1,
+    tau_align: float = 0.0,
+    img_eps_budget: float = 0.1,
+    txt_ratio_budget: float = 0.3,
+    recalc_after_image: bool = False,
+    use_cache: bool = True,
+) -> Dict[str, Any]:
+    """Iteratively perturb ``state`` towards the target embedding.
+
+    Parameters
+    ----------
+    model:
+        Placeholder for the heavy model used in the original project.  It is
+        unused but kept for API compatibility.
+    state:
+        Mutable mapping containing at least the keys ``image`` (feature
+        vector), ``text`` (string representation), ``anchor`` (original
+        features) and ``target_feat`` (embedding we move towards).  Optionally a
+        cached mask may be stored under ``mask``.
+    img_perturber / txt_perturber:
+        Helper objects performing the actual perturbations.
+    inner_rounds:
+        Number of optimisation rounds to perform.
+    tau_align:
+        Early stopping threshold on alignment improvement.
+    img_eps_budget / txt_ratio_budget:
+        Budgets controlling when the optimisation stops.
+    recalc_after_image:
+        When ``True`` the saliency masks are recomputed after the image update
+        in each round.
+    use_cache:
+        Whether a mask cached in ``state`` should be reused for the first
+        round.
+
+    Returns
+    -------
+    dict
+        Updated ``state`` with additional bookkeeping information under the
+        keys ``img_eps_used`` and ``text_ratio`` as well as the list
+        ``round_metrics`` and ``termination`` reason.
+    """
+
+    keywords = state.get("keywords", [])
+    orig_tokens = state.get("text", "").split()
+    round_metrics: List[Dict[str, float]] = []
+    img_eps_used = 0.0
+    text_ratio = 0.0
+    termination = "max_rounds"
+
+    for r in range(inner_rounds):
+        masks = get_masks(model, state, use_cache if r == 0 else False)
+        img_mask = masks.get("image", [])
+        txt_mask = masks.get("text", [])
+
+        prev_img = list(state.get("image", []))
+        perturbed_img = img_perturber.perturb(
+            state.get("image", []), img_mask, state.get("target_feat", [])
+        )
+        dist_before = _l2_distance(state.get("image", []), state.get("target_feat", []))
+        dist_after = _l2_distance(perturbed_img, state.get("target_feat", []))
+        delta_align = dist_before - dist_after
+        psnr = _psnr(prev_img, perturbed_img)
+        state["image"] = perturbed_img
+        anchor = state.get("anchor", [])
+        if state["image"] and anchor:
+            img_eps_used = max(abs(a - b) for a, b in zip(state["image"], anchor))
+
+        if recalc_after_image:
+            masks = get_masks(model, state, use_cache=False)
+            img_mask = masks.get("image", [])
+            txt_mask = masks.get("text", [])
+
+        prev_text = state.get("text", "")
+        curr_text = txt_perturber.perturb(prev_text, txt_mask, keywords)
+        state["text"] = curr_text
+        curr_tokens = curr_text.split()
+        replaced_total = sum(o != c for o, c in zip(orig_tokens, curr_tokens))
+        text_ratio = replaced_total / max(len(orig_tokens), 1)
+
+        round_metrics.append(
+            {
+                "round": r,
+                "delta_align": delta_align,
+                "psnr": psnr,
+                "text_ratio": text_ratio,
+            }
+        )
+
+        if delta_align < tau_align:
+            termination = "aligned"
+            break
+        if img_eps_used >= img_eps_budget or text_ratio >= txt_ratio_budget:
+            termination = "budget"
+            break
+
+    state["img_eps_used"] = img_eps_used
+    state["text_ratio"] = text_ratio
+    state["round_metrics"] = round_metrics
+    state["termination"] = termination
+    return state
+
+
 
 
 def run_pipeline(args: Any) -> Dict[str, Any]:
@@ -486,4 +596,4 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     }
 
 
-__all__ = ["PoisonPipeline", "run_pipeline"]
+__all__ = ["PoisonPipeline", "run_pipeline", "process_target"]

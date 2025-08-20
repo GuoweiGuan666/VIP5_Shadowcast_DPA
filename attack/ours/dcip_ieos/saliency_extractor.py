@@ -261,3 +261,41 @@ class SaliencyExtractor:
         )
 
         return masks, stats
+
+
+# ---------------------------------------------------------------------------
+# Convenience helper used by the poison pipeline
+# ---------------------------------------------------------------------------
+
+def get_masks(model: Any, state: Dict[str, Any], use_cache: bool) -> Dict[str, List[bool]]:
+    """Return cross-modal saliency masks for the given ``state``.
+
+    The real project obtains saliency masks from a large model.  For the test
+    environment we mimic the behaviour using :class:`SaliencyExtractor`.  When
+    ``use_cache`` is ``True`` the function first looks for a previously
+    computed mask stored under ``state['mask']``.  If none is found, or when
+    ``use_cache`` is ``False``, the masks are recomputed based on the current
+    image and text stored in ``state``.
+    """
+
+    cached = state.get("mask") if isinstance(state, dict) else None
+    if use_cache and isinstance(cached, dict):
+        return {
+            "image": list(cached.get("image", [])),
+            "text": list(cached.get("text", [])),
+        }
+
+    extractor = SaliencyExtractor()
+    img_feat = state.get("image") if isinstance(state, dict) else None
+    txt_feat = state.get("text") if isinstance(state, dict) else None
+    items = [{"image": img_feat, "text": txt_feat}]
+    masks, _ = extractor.extract_cross_modal_masks(items)
+    mask = masks.get(0, {"image": [], "text": []})
+
+    if isinstance(state, dict):
+        state["mask"] = mask
+
+    return {
+        "image": list(mask.get("image", [])),
+        "text": list(mask.get("text", [])),
+    }
