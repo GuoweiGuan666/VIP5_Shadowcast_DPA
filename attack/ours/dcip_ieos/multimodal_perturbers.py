@@ -40,6 +40,13 @@ def masked_pgd_image(
     stops. A coverage metric – the proportion of masked elements that actually
     changed – is logged at the end. The PSNR computation uses either the
     dynamic data range of ``x_img_or_feat`` or the optional ``peak`` value.
+
+    Returns
+    -------
+    pert : list of float
+        The perturbed image/feature vector.
+    coverage : float
+        Fraction of masked elements that changed.
     """
 
     orig = [float(v) for v in x_img_or_feat]
@@ -86,7 +93,8 @@ def masked_pgd_image(
             changed_idx.append(i)
     coverage = len(changed_idx) / max(sum(msk), 1)
     logging.info("masked_pgd_image coverage %.2f%%", coverage * 100)
-    return pert
+    return pert, coverage
+
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +107,7 @@ def guided_text_paraphrase(
     keywords: Iterable[str] | Dict[str, str],
     ratio: float,
     synonym_table: Optional[Dict[str, Sequence[str]]] = None,
-) -> Dict[str, Any]:
+) -> tuple[List[str], int, int]:
     """Paraphrase high‑saliency ``tokens`` guided by ``keywords``.
 
     At most ``ratio`` proportion of tokens are replaced. Only positions where
@@ -108,6 +116,15 @@ def guided_text_paraphrase(
     eligible for replacement – in the latter case ``synonym_table`` is queried
     for candidate substitutions. The function logs the coverage, i.e. the
     fraction of eligible tokens that changed.
+
+    Returns
+    -------
+    tokens : list of str
+        Possibly modified token sequence.
+    replaced : int
+        Number of tokens replaced.
+    total : int
+        Total number of tokens supplied.
     """
 
     toks = list(tokens)
@@ -137,7 +154,8 @@ def guided_text_paraphrase(
 
     coverage = len(changed_pos) / max(sum(msk), 1)
     logging.info("guided_text_paraphrase coverage %.2f%%", coverage * 100)
-    return {"tokens": toks, "total": n, "replaced": changes}
+    return toks, changes, n
+
 
 
 
@@ -218,7 +236,7 @@ class ImagePerturber:
         image: Sequence[float],
         mask: Optional[Sequence[bool]] = None,
         target_feat: Optional[Sequence[float]] = None,
-    ) -> tuple[List[float], float, float]:
+    ) -> tuple[List[float], float, float, Dict[str, float]]:
         """Perturb ``image`` under ``mask`` towards ``target_feat``.
 
         Parameters
@@ -241,7 +259,7 @@ class ImagePerturber:
             target_feat = [0.0] * len(x)
         m = [bool(v) for v in mask]
         tgt = [float(v) for v in target_feat]
-        pert = masked_pgd_image(x, m, tgt, self.eps, self.iters, self.psnr_min)
+        pert, coverage = masked_pgd_image(x, m, tgt, self.eps, self.iters, self.psnr_min)
 
         # Derive final PSNR and epsilon usage relative to the provided image
         data_range = max(x) - min(x) if x else 0.0
@@ -251,7 +269,8 @@ class ImagePerturber:
         psnr = 10 * math.log10((data_range ** 2) / (mse + 1e-12))
         eps_used = max((abs(a - b) for a, b in zip(x, pert)), default=0.0)
 
-        return pert, psnr, eps_used
+        return pert, psnr, eps_used, {"coverage": coverage}
+
 
 
 class TextPerturber:
@@ -266,18 +285,21 @@ class TextPerturber:
         text: str,
         mask: Optional[Sequence[bool]] = None,
         keyword_map: Optional[Iterable[str] | Dict[str, str]] = None,
-    ) -> tuple[str, float]:
+    ) -> tuple[str, float, Dict[str, int]]:
         """Paraphrase ``text`` guided by ``keyword_map`` and ``mask``."""
         tokens = text.split()
         if mask is None or len(mask) == 0:
             mask = [True] * len(tokens)
         keywords = keyword_map if keyword_map is not None else self.keywords
-        result = guided_text_paraphrase(tokens, mask, keywords, self.ratio, self.keywords)
-        logging.info(
-            "TextPerturber replaced %d of %d tokens", result["replaced"], result["total"]
+        tokens, replaced, total = guided_text_paraphrase(
+            tokens, mask, keywords, self.ratio, self.keywords
         )
-        replace_ratio = result["replaced"] / max(result["total"], 1)
-        return " ".join(result["tokens"]), replace_ratio
+        logging.info(
+            "TextPerturber replaced %d of %d tokens", replaced, total
+        )
+        replace_ratio = replaced / max(total, 1)
+        return " ".join(tokens), replace_ratio, {"replaced": replaced}
+
 
 
 __all__ = [

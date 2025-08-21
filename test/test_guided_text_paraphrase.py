@@ -6,10 +6,10 @@ def test_guided_text_paraphrase_returns_stats():
     tokens = ["good", "product", "bad"]
     mask = [True, True, True]
     keywords = {"good": "great", "bad": "poor"}
-    result = guided_text_paraphrase(tokens, mask, keywords, 1.0)
-    assert result["tokens"] == ["great", "product", "poor"]
-    assert result["total"] == 3
-    assert result["replaced"] == 2
+    tokens, replaced, total = guided_text_paraphrase(tokens, mask, keywords, 1.0)
+    assert tokens == ["great", "product", "poor"]
+    assert total == 3
+    assert replaced == 2
 
 
 def test_guided_text_paraphrase_mask_length_mismatch():

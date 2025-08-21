@@ -203,7 +203,7 @@ def process_target(
         txt_mask = masks.get("text", [])
 
         prev_img = list(state.get("image", []))
-        perturbed_img, psnr, eps = img_perturber.perturb(
+        perturbed_img, psnr, eps, _ = img_perturber.perturb(
             state.get("image", []), img_mask, state.get("target_feat", [])
         )
         
@@ -216,7 +216,7 @@ def process_target(
             txt_mask = masks.get("text", [])
 
         prev_text = state.get("text", "")
-        curr_text, replace_ratio = txt_perturber.perturb(prev_text, txt_mask, keywords)
+        curr_text, replace_ratio, _ = txt_perturber.perturb(prev_text, txt_mask, keywords)
         state["text"] = curr_text
         text_ratio += replace_ratio
 
@@ -483,7 +483,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
         for r in range(inner_rounds):
             prev_img = list(curr_img)
-            perturbed_img, psnr, eps = img_perturber.perturb(
+            perturbed_img, psnr, eps, _ = img_perturber.perturb(
                 curr_img, img_mask, target_vec
             )
             curr_img = perturbed_img
@@ -491,7 +491,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
             if r == 0 or recalc_after_image:
                 prev_text = curr_text
-                curr_text, replace_ratio = txt_perturber.perturb(
+                curr_text, replace_ratio, _ = txt_perturber.perturb(
                     curr_text, txt_mask, keywords
                 )
                 text_ratio += replace_ratio
