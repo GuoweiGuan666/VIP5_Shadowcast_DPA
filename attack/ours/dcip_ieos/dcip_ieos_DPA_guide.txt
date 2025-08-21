@@ -1,3 +1,34 @@
+Saliency extraction requires each pool item to include both `image` and `text` fields.
+If `<data_root>/<dataset>/pool.json` is missing or lacks these keys,
+`run_dcip_ieos.py` will emit log messages like `Target <id> missing image and text data`
+and abort with:
+
+    RuntimeError: Raw competition pool lacks image/text data
+
+Ensure a pool JSON with the required keys is available or supply a compatible
+`item_loader` when mining the pool.
+
+Example custom loader:
+
+    from attack.ours.dcip_ieos.pool_miner import build_competition_pool
+    build_competition_pool(..., item_loader=lambda i: {"image": ..., "text": ...})
+
+Example using an explicit pool file:
+
+    python attack/ours/dcip_ieos/run_dcip_ieos.py \\
+        --dataset clothing --mr 0.01 \\
+        --data-root data \\
+        --cache-dir attack/ours/dcip_ieos/caches \\
+        --pool-json data/clothing/pool.json
+
+To rely on the default location, create the directory and place `pool.json`:
+
+    mkdir -p data/clothing
+    cp /path/to/pool.json data/clothing/pool.json
+
+
+
+
 python attack/ours/dcip_ieos/run_dcip_ieos.py \
     --dataset clothing \
     --mr 0.01 \
