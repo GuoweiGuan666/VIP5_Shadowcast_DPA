@@ -241,10 +241,10 @@ def process_target(
             termination = "psnr"
             break
         if text_ratio > txt_ratio_max:
-            termination = "budget"
+            termination = "txt_budget"
             break
         if img_eps_used > img_eps_max:
-            termination = "budget"
+            termination = "img_budget"
             break
 
     state["img_eps_used"] = img_eps_used
@@ -516,10 +516,10 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
                 termination = "psnr"
                 break
             if text_ratio > txt_ratio_max:
-                termination = "budget"
+                termination = "txt_budget"
                 break
             if img_eps_used > img_eps_max:
-                termination = "budget"
+                termination = "img_budget"
                 break
 
         dist_anchor = _l2_distance(curr_img, anchor)
