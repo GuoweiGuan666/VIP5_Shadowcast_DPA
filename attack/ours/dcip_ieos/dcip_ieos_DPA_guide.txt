@@ -11,3 +11,12 @@ python attack/ours/dcip_ieos/run_dcip_ieos.py \
     --mask-top-p 0.15 \
     --mask-top-q 0.15 \
     --victim-ckpt path/to/BEST_EVAL_LOSS.pth  # 仅占位，可省略
+
+
+# Inner loop options (defaults shown)
+    --inner_rounds 3            # optimisation rounds per target
+    --align_tau 1e-3            # stop when alignment gain falls below τ
+    --recalc_after_image        # recompute saliency mask after image update
+    --txt_ratio_max 0.3         # cap on replaced text token proportion
+    --img_eps_max 0.1           # L-inf budget for image perturbations
+    --log_inner_curves          # store per-round metrics under caches/reports

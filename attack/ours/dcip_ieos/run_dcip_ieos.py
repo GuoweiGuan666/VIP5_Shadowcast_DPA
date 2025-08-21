@@ -184,6 +184,40 @@ def parse_args() -> argparse.Namespace:
         default="dcip_ieos",
         help="Attack name used for naming the output files.",
     )
+    parser.add_argument(
+        "--inner_rounds",
+        type=int,
+        default=3,
+        help="Number of optimisation rounds in the inner loop.",
+    )
+    parser.add_argument(
+        "--align_tau",
+        type=float,
+        default=1e-3,
+        help="Early stopping threshold on alignment improvement.",
+    )
+    parser.add_argument(
+        "--recalc_after_image",
+        action="store_true",
+        help="Recompute saliency masks after each image update.",
+    )
+    parser.add_argument(
+        "--txt_ratio_max",
+        type=float,
+        default=0.3,
+        help="Maximum proportion of text tokens that may be replaced.",
+    )
+    parser.add_argument(
+        "--img_eps_max",
+        type=float,
+        default=0.1,
+        help="Maximum L-inf perturbation applied to image features.",
+    )
+    parser.add_argument(
+        "--log_inner_curves",
+        action="store_true",
+        help="Persist per-target inner loop metrics for analysis.",
+    )
     return parser.parse_args()
 
 
@@ -373,6 +407,12 @@ def main() -> None:
         pca_dim=args.pca_dim,
         p_insert=args.p_insert,
         p_replace=args.p_replace,
+        inner_rounds=args.inner_rounds,
+        align_tau=args.align_tau,
+        recalc_after_image=args.recalc_after_image,
+        txt_ratio_max=args.txt_ratio_max,
+        img_eps_max=args.img_eps_max,
+        log_inner_curves=args.log_inner_curves,
     )
     poison_info = run_pipeline(pipeline_args)
 

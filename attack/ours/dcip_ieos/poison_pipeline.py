@@ -139,10 +139,11 @@ def process_target(
     state: Dict[str, Any],
     img_perturber: ImagePerturber,
     txt_perturber: TextPerturber,
-    inner_rounds: int = 1,
-    tau_align: float = 0.0,
+    inner_rounds: int = 3,
+    align_tau: float = 0.0,
     psnr_min: Optional[float] = None,
     txt_ratio_max: Optional[float] = None,
+    img_eps_max: Optional[float] = None,
     recalc_after_image: bool = False,
     use_cache: bool = True,
 ) -> Dict[str, Any]:
@@ -162,10 +163,11 @@ def process_target(
         Helper objects performing the actual perturbations.
     inner_rounds:
         Number of optimisation rounds to perform.
-    tau_align:
+    align_tau:
         Early stopping threshold on alignment improvement.
-    psnr_min / txt_ratio_max:
-        Stopping thresholds for image quality and text replacements.
+    psnr_min / txt_ratio_max / img_eps_max:
+        Stopping thresholds for image quality, text replacements and total image
+        perturbation respectively.
     recalc_after_image:
         When ``True`` the saliency masks are recomputed after the image update
         in each round.
@@ -192,6 +194,8 @@ def process_target(
         psnr_min = img_perturber.psnr_min
     if txt_ratio_max is None:
         txt_ratio_max = txt_perturber.ratio
+    if img_eps_max is None:
+        img_eps_max = img_perturber.eps
 
     for r in range(inner_rounds):
         masks = get_masks(model, state, use_cache if r == 0 else False)
@@ -230,13 +234,16 @@ def process_target(
             }
         )
 
-        if align_gain < tau_align:
+        if align_gain < align_tau:
             termination = "aligned"
             break
         if psnr < psnr_min:
             termination = "psnr"
             break
         if text_ratio > txt_ratio_max:
+            termination = "budget"
+            break
+        if img_eps_used > img_eps_max:
             termination = "budget"
             break
 
@@ -307,9 +314,9 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     pca_dim = getattr(args, "pca_dim", 128)
     p_insert = float(getattr(args, "p_insert", 0.2))
     p_replace = float(getattr(args, "p_replace", 0.2))
-    inner_rounds = int(getattr(args, "inner_rounds", 1))
-    tau_align = float(getattr(args, "tau_align", 0.0))
-    recompute_masks = bool(getattr(args, "recompute_masks", False))
+    inner_rounds = int(getattr(args, "inner_rounds", 3))
+    align_tau = float(getattr(args, "align_tau", 1e-3))
+    recalc_after_image = bool(getattr(args, "recalc_after_image", False))
     log_inner_curves = bool(getattr(args, "log_inner_curves", False))
     logging.info(
         "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
@@ -433,10 +440,11 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     next_user_id = max((int(l.split()[0]) for l in seq_lines), default=0) + 1
 
     # Perturbation helpers
-    img_perturber = ImagePerturber()
-    txt_perturber = TextPerturber()
+    txt_ratio_max = float(getattr(args, "txt_ratio_max", 0.3))
+    img_eps_max = float(getattr(args, "img_eps_max", 0.1))
+    img_perturber = ImagePerturber(eps=img_eps_max)
+    txt_perturber = TextPerturber(ratio=txt_ratio_max)
     psnr_min = float(getattr(args, "psnr_min", img_perturber.psnr_min))
-    txt_ratio_max = float(getattr(args, "txt_ratio_max", txt_perturber.ratio))
 
     fake_users: List[str] = []
     distance_cache: Dict[str, float] = {}
@@ -481,7 +489,7 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             curr_img = perturbed_img
             img_eps_used += eps
 
-            if r == 0 or recompute_masks:
+            if r == 0 or recalc_after_image:
                 prev_text = curr_text
                 curr_text, replace_ratio = txt_perturber.perturb(
                     curr_text, txt_mask, keywords
@@ -501,13 +509,16 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
                 }
             )
 
-            if align_gain < tau_align:
+            if align_gain < align_tau:
                 termination = "aligned"
                 break
             if psnr < psnr_min:
                 termination = "psnr"
                 break
             if text_ratio > txt_ratio_max:
+                termination = "budget"
+                break
+            if img_eps_used > img_eps_max:
                 termination = "budget"
                 break
 
