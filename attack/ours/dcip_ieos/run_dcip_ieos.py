@@ -57,11 +57,13 @@ if __package__ is None or __package__ == "":  # pragma: no cover - runtime guard
     from attack.ours.dcip_ieos.pool_miner import PoolMiner
     from attack.ours.dcip_ieos.saliency_extractor import SaliencyExtractor
     from attack.ours.dcip_ieos.poison_pipeline import run_pipeline
+    from attack.ours.dcip_ieos.multimodal_perturbers import ImagePerturber
     from attack.ours.dcip_ieos import checks
 else:  # pragma: no cover - imported as a package
     from .pool_miner import PoolMiner
     from .saliency_extractor import SaliencyExtractor
     from .poison_pipeline import run_pipeline
+    from .multimodal_perturbers import ImagePerturber
     from . import checks
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -212,6 +214,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.1,
         help="Maximum L-inf perturbation applied to image features.",
+    )
+    parser.add_argument(
+        "--psnr_min",
+        type=float,
+        default=ImagePerturber().psnr_min,
+        help="Minimum acceptable PSNR for image perturbations.",
     )
     parser.add_argument(
         "--log_inner_curves",
@@ -412,6 +420,7 @@ def main() -> None:
         recalc_after_image=args.recalc_after_image,
         txt_ratio_max=args.txt_ratio_max,
         img_eps_max=args.img_eps_max,
+        psnr_min=args.psnr_min,
         log_inner_curves=args.log_inner_curves,
     )
     poison_info = run_pipeline(pipeline_args)
