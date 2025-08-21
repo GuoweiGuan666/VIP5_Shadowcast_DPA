@@ -279,6 +279,56 @@ def main() -> None:
         args.pool_json = os.path.join(args.data_root, args.dataset, "pool.json")
     os.makedirs(args.cache_dir, exist_ok=True)
 
+    # Pre-load raw item metadata for the custom item loader.  The expectation
+    # is that ``pool.json`` (or the path supplied via ``--pool-json``) contains
+    # entries with at least ``id``, ``image``/``image_input`` and ``text``
+    # fields.  Only a light-weight best-effort parsing is performed – missing
+    # files or fields simply result in empty fallbacks which keeps the
+    # subsequent mining logic functional while providing real data when
+    # available.
+    item_map: Dict[Any, Dict[str, Any]] = {}
+    try:
+        with open(args.pool_json, "r", encoding="utf-8") as f:
+            raw_items = json.load(f)
+        if isinstance(raw_items, list):
+            for entry in raw_items:
+                iid = entry.get("id")
+                if iid is not None:
+                    key = int(iid) if str(iid).isdigit() else iid
+                    item_map[key] = entry
+        elif isinstance(raw_items, dict):
+            for key, entry in raw_items.items():
+                iid = entry.get("id", key)
+                key = int(iid) if str(iid).isdigit() else iid
+                item_map[key] = entry
+    except Exception:
+        item_map = {}
+
+    def item_loader(item_id: int) -> Dict[str, Any]:
+        """Return raw ``image_input`` and ``text`` fields for ``item_id``.
+
+        The loader looks up the item inside ``item_map`` populated from the
+        dataset's ``pool.json``.  When a field is missing, a minimal fallback is
+        used to keep the downstream logic operational.
+        """
+
+        item = item_map.get(item_id)
+        if item is None and isinstance(item_id, str) and item_id.isdigit():
+            item = item_map.get(int(item_id))
+        if not item:
+            return {}
+
+        img = (
+            item.get("image_input")
+            or item.get("image")
+            or item.get("image_feat")
+            or []
+        )
+        txt_in = item.get("text_input") or item.get("text_feat") or []
+        text = item.get("text") or item.get("title") or ""
+
+        return {"image_input": img, "text_input": txt_in, "text": text}
+
     # ------------------------------------------------------------------
     # 1) Mine or load the competition pool
     # ------------------------------------------------------------------
@@ -307,6 +357,7 @@ def main() -> None:
                 pop_path=args.pop_path,
                 model=None,
                 cache_dir=args.cache_dir,
+                item_loader=item_loader,
                 w_img=args.w_img,
                 w_txt=args.w_txt,
                 pca_dim=args.pca_dim if args.use_pca else None,
