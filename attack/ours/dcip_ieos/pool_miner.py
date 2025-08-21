@@ -287,19 +287,26 @@ def build_competition_pool(
 
     fused_embs: List[np.ndarray] = []
     texts: List[str] = []
+    raw_items: Dict[str, Dict[str, Any]] = {}
     for item_id in high_pop:
         item = item_loader(item_id) or {}
-        img_in = item.get("image_input", np.zeros(1, dtype=float))
-        txt_in = item.get("text_input", np.zeros(1, dtype=float))
+        img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
+        txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
         text = str(item.get("text", ""))
+
+        raw_items[str(item_id)] = {
+            "image_input": img_in.tolist(),
+            "text_input": txt_in.tolist(),
+            "text": text,
+        }
 
         if model is not None:
             outputs = forward_inference(model, img_in, txt_in)
             img_emb = np.asarray(outputs.get("image_embedding", np.zeros(1))).astype(float).ravel()
             txt_emb = np.asarray(outputs.get("text_embedding", np.zeros(1))).astype(float).ravel()
         else:  # pragma: no cover - used only in CLI fallbacks
-            img_emb = np.asarray(img_in, dtype=float).ravel()
-            txt_emb = np.asarray(txt_in, dtype=float).ravel()
+            img_emb = img_in.ravel()
+            txt_emb = txt_in.ravel()
         fused = w_img * img_emb + w_txt * txt_emb
         fused_embs.append(fused)
         texts.append(text)
@@ -382,6 +389,7 @@ def build_competition_pool(
         "clusters": clusters,
         "pool": pool,
         "keywords": keywords,
+        "raw_items": raw_items,
         "params": {
             "w_img": w_img,
             "w_txt": w_txt,

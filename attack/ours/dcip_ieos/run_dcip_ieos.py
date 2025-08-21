@@ -35,7 +35,7 @@ import pickle
 import sys
 import random
 from types import SimpleNamespace
-from typing import Dict
+from typing import Any, Dict
 
 try:
     import numpy as np
@@ -297,6 +297,7 @@ def main() -> None:
         args.pca_dim,
     )
     raw_pool = []
+    raw_map: Dict[Any, Dict[str, Any]] = {}
     if not os.path.isfile(comp_path):
         if args.pop_path:
             from attack.ours.dcip_ieos.pool_miner import build_competition_pool
@@ -314,6 +315,14 @@ def main() -> None:
             )
             pool_dict = data.get("pool", {})
             keywords = data.get("keywords", {})
+            raw_items = data.get("raw_items", {})
+            raw_map = {
+                int(tid) if str(tid).isdigit() else tid: {
+                    "image": info.get("image_input", []),
+                    "text": info.get("text", ""),
+                }
+                for tid, info in raw_items.items()
+            }
             comp_pool = [
                 {
                     "target": int(tid) if str(tid).isdigit() else tid,
@@ -350,14 +359,15 @@ def main() -> None:
     # metadata such as neighbours and anchors, therefore we re-load the raw
     # pool (if necessary) and align it with the order of ``comp_pool`` so that
     # the resulting mask has one entry per target item.
-    if raw_pool:
-        raw_map = {entry.get("id"): entry for entry in raw_pool}
-    elif os.path.isfile(args.pool_json):
-        with open(args.pool_json, "r", encoding="utf-8") as f:
-            raw_data = json.load(f)
-        raw_map = {entry.get("id"): entry for entry in raw_data}
-    else:
-        raw_map = {}
+    if not raw_map:
+        if raw_pool:
+            raw_map = {entry.get("id"): entry for entry in raw_pool}
+        elif os.path.isfile(args.pool_json):
+            with open(args.pool_json, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+            raw_map = {entry.get("id"): entry for entry in raw_data}
+        else:
+            raw_map = {}
 
     victim_model = None
     if args.victim_ckpt:
