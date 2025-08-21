@@ -197,6 +197,21 @@ Download preprocessed data and image features from this [Google Drive link](http
     CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_VIP5.sh 4 toys 13579 vitb32 2 8 20
     ```
 
+
+## DCIP-IEOS attack pipeline
+
+The lightweight `attack/ours/dcip_ieos/run_dcip_ieos.py` script orchestrates the
+toy DCIP‑IEOS poisoning pipeline used in the tests. By default it aborts when
+the competition pool contains entries without image or text features. The
+`--skip-missing` flag allows the script to continue by skipping such targets:
+
+```bash
+python attack/ours/dcip_ieos/run_dcip_ieos.py --dataset <split> --skip-missing
+```
+
+Each skipped item is logged with a warning while the remaining targets are
+processed as normal.
+
 ## Citation
 
 Please cite the following paper corresponding to the repository:

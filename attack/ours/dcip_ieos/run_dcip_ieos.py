@@ -262,6 +262,11 @@ def parse_args() -> argparse.Namespace:
         help="Persist per-target mask coverage statistics for debugging.",
     )
     parser.add_argument(
+        "--skip-missing",
+        action="store_true",
+        help="Skip targets missing image or text data instead of raising an error.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -522,6 +527,8 @@ def main() -> None:
                 pass
         mask_pool.append(pool_item)
 
+    filtered_comp_pool = []
+    filtered_mask_pool = []
     errors = []
     for comp, pool_item in zip(comp_pool, mask_pool):
         missing = []
@@ -531,12 +538,20 @@ def main() -> None:
             missing.append("text")
         if missing:
             target = comp.get("target")
-            logging.error(
-                "Target %s missing %s data", target, " and ".join(missing)
-            )
+            msg = f"Target {target} missing {' and '.join(missing)} data"
+            if args.skip_missing:
+                logging.warning(msg)
+                continue
+            logging.error(msg)
             errors.append(target)
+            continue
+        filtered_comp_pool.append(comp)
+        filtered_mask_pool.append(pool_item)
     if errors:
         raise RuntimeError("Raw competition pool lacks image/text data")
+    if args.skip_missing:
+        comp_pool = filtered_comp_pool
+        mask_pool = filtered_mask_pool
  
     vis_token_pos = [list(range(len(item.get("image", [])))) for item in mask_pool]
 
