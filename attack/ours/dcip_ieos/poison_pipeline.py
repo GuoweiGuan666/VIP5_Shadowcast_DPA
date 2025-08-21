@@ -425,6 +425,20 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
                 k: v for k, v in cross_modal_mask.items() if k < int(limit)
             }
 
+    debug_mask_path = os.path.join(cache_dir, f"mask_debug_{dataset}.jsonl")
+    mask_debug = []
+    if os.path.isfile(debug_mask_path):
+        with open(debug_mask_path, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    mask_debug.append(json.loads(line))
+                except Exception:
+                    continue
+        if limit is not None:
+            mask_debug = mask_debug[: int(limit)]
+    else:
+        mask_debug = None
+
     # ------------------------------------------------------------------
     # Load original dataset artefacts (best effort – some tests only require
     # the output files to exist, thus the loose defaults)
@@ -477,6 +491,14 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             txt_budget,
             len(txt_mask),
         )
+        if mask_debug and idx < len(mask_debug):
+            dbg = mask_debug[idx]
+            logging.info(
+                "Mask debug: img_ratio=%.3f txt_ratio=%.3f mismatch=%s",
+                float(dbg.get("img_ratio", 0.0)),
+                float(dbg.get("txt_ratio", 0.0)),
+                bool(dbg.get("mismatch", False)),
+            )
 
         anchor = target_info.get("anchor", [])
         target_vec = target_info.get("target_feat", [0.0] * len(anchor))

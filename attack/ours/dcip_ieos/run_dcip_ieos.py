@@ -251,6 +251,11 @@ def parse_args() -> argparse.Namespace:
         help="Only validate inputs without executing the poisoning pipeline.",
     )
     parser.add_argument(
+        "--debug_masks",
+        action="store_true",
+        help="Persist per-target mask coverage statistics for debugging.",
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -433,6 +438,51 @@ def main() -> None:
     _warn("Image", stats.get("image", {}), 0.05, 0.25)
     _warn("Text", stats.get("text", {}), 0.02, 0.15)
 
+    if args.debug_masks:
+        debug_path = os.path.join(
+            args.cache_dir, f"mask_debug_{args.dataset}.jsonl"
+        )
+        with open(debug_path, "w", encoding="utf-8") as dbg:
+            for idx, entry in enumerate(comp_pool):
+                m = masks.get(idx, {})
+                img_mask = m.get("image", [])
+                txt_mask = m.get("text", [])
+                img_ratio = (
+                    sum(bool(v) for v in img_mask) / len(img_mask)
+                    if img_mask
+                    else 0.0
+                )
+                txt_ratio = (
+                    sum(bool(v) for v in txt_mask) / len(txt_mask)
+                    if txt_mask
+                    else 0.0
+                )
+                mismatch = (len(img_mask) == 0) != (len(txt_mask) == 0)
+                record = {
+                    "target": entry.get("target"),
+                    "img_ratio": img_ratio,
+                    "txt_ratio": txt_ratio,
+                    "img_len": len(img_mask),
+                    "txt_len": len(txt_mask),
+                    "mismatch": mismatch,
+                }
+                if args.dry_run:
+                    logging.info(
+                        "Target %s mask coverage: img %.2f (%d) txt %.2f (%d) mismatch=%s",
+                        record["target"],
+                        img_ratio,
+                        len(img_mask),
+                        txt_ratio,
+                        len(txt_mask),
+                        mismatch,
+                    )
+                dbg.write(json.dumps(record) + "\n")
+
+    if args.dry_run:
+        logging.info("Dry run requested; skipping poisoning pipeline execution")
+        return
+
+
     # ------------------------------------------------------------------
     # 3) Run the poisoning pipeline
     # ------------------------------------------------------------------
@@ -460,9 +510,7 @@ def main() -> None:
         log_inner_curves=args.log_inner_curves,
         limit=args.limit,
     )
-    if args.dry_run:
-        logging.info("Dry run requested; skipping poisoning pipeline execution")
-        return
+
     
     poison_info = run_pipeline(pipeline_args)
 

@@ -200,7 +200,11 @@ class SaliencyExtractor:
                 txt_scores = self.extract(text_vec)
 
             img_mask = _topk_mask(img_scores, top_p)
+            if not any(img_mask) and len(img_mask) > 0:
+                img_mask[0] = True
             txt_mask = _topk_mask(txt_scores, top_q)
+            if not any(txt_mask) and len(txt_mask) > 0:
+                txt_mask[0] = True
 
             if pos_list is not None:
                 assert len(img_mask) == len(pos_list)
