@@ -20,6 +20,11 @@ The script performs the following stages:
 4.  **Checks** – perform a couple of sanity checks to ensure the cached files
     exist and can be loaded.
 
+Before kicking off these stages, the script performs a light-weight validation
+of the competition pool JSON to ensure every entry provides non-empty
+``image_input`` (or equivalent) and ``text`` fields.  This guards against
+accidentally running the pipeline with incomplete inputs.
+
 The heavy weight victim model checkpoint is accepted via ``--victim-ckpt`` for
 compatibility with the research code but is unused by the light‑weight
 implementation.
@@ -108,8 +113,9 @@ def parse_args() -> argparse.Namespace:
         "--pool-json",
         default=None,
         help=(
-            "Raw competition pool JSON.  Defaults to "
-            "<data_root>/<dataset>/pool.json"
+            "Raw competition pool JSON containing non-empty 'image_input' "
+            "and 'text' fields. Defaults to <data_root>/<dataset>/pool.json; "
+            "the file is validated before execution."
         ),
     )
     parser.add_argument(
@@ -264,6 +270,56 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _load_validated_pool(path: str) -> Any:
+    """Parse ``path`` and ensure every entry has image and text fields.
+
+    Parameters
+    ----------
+    path:
+        Location of the pool JSON file.
+
+    Returns
+    -------
+    Any
+        Parsed JSON structure.
+
+    Raises
+    ------
+    RuntimeError
+        If the file is missing, cannot be parsed or contains incomplete
+        entries.  Each entry must provide non-empty ``image_input`` (or an
+        equivalent image field) and ``text`` data.
+    """
+
+    if not os.path.isfile(path):
+        raise RuntimeError(
+            f"Pool file '{path}' does not exist. Provide a complete pool.json via --pool-json."
+        )
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    entries = data.values() if isinstance(data, dict) else data
+    for entry in entries:
+        img = entry.get("image_input") or entry.get("image") or entry.get("image_feat")
+        txt = (
+            entry.get("text")
+            or entry.get("title")
+            or entry.get("text_input")
+            or entry.get("text_feat")
+        )
+        if not img or not txt:
+            logging.error(
+                "Target %s missing image and text data", entry.get("id", "<unknown>")
+            )
+            raise RuntimeError(
+                "Raw competition pool lacks image/text data; provide a complete pool.json via --pool-json."
+            )
+
+    return data
+
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
@@ -279,30 +335,24 @@ def main() -> None:
         args.pool_json = os.path.join(args.data_root, args.dataset, "pool.json")
     os.makedirs(args.cache_dir, exist_ok=True)
 
-    # Pre-load raw item metadata for the custom item loader.  The expectation
-    # is that ``pool.json`` (or the path supplied via ``--pool-json``) contains
-    # entries with at least ``id``, ``image``/``image_input`` and ``text``
-    # fields.  Only a light-weight best-effort parsing is performed – missing
-    # files or fields simply result in empty fallbacks which keeps the
-    # subsequent mining logic functional while providing real data when
-    # available.
+    # Parse and validate the raw competition pool file before proceeding.
+    raw_items = _load_validated_pool(args.pool_json)
+
+    # Pre-load raw item metadata for the custom item loader.  Validation above
+    # guarantees the presence of non-empty ``image_input``/``text`` fields in
+    # ``raw_items`` but lookups may still fail, hence the fallbacks below.
     item_map: Dict[Any, Dict[str, Any]] = {}
-    try:
-        with open(args.pool_json, "r", encoding="utf-8") as f:
-            raw_items = json.load(f)
-        if isinstance(raw_items, list):
-            for entry in raw_items:
-                iid = entry.get("id")
-                if iid is not None:
-                    key = int(iid) if str(iid).isdigit() else iid
-                    item_map[key] = entry
-        elif isinstance(raw_items, dict):
-            for key, entry in raw_items.items():
-                iid = entry.get("id", key)
+    if isinstance(raw_items, list):
+        for entry in raw_items:
+            iid = entry.get("id")
+            if iid is not None:
                 key = int(iid) if str(iid).isdigit() else iid
                 item_map[key] = entry
-    except Exception:
-        item_map = {}
+    elif isinstance(raw_items, dict):
+        for key, entry in raw_items.items():
+            iid = entry.get("id", key)
+            key = int(iid) if str(iid).isdigit() else iid
+            item_map[key] = entry
 
     def item_loader(item_id: int) -> Dict[str, Any]:
         """Return raw ``image_input`` and ``text`` fields for ``item_id``.
