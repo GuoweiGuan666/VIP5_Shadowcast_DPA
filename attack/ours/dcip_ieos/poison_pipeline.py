@@ -417,6 +417,14 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
     logging.info("Loaded %d competition targets", len(competition_pool))
 
+    limit = getattr(args, "limit", None)
+    if limit is not None:
+        competition_pool = competition_pool[: int(limit)]
+        if isinstance(cross_modal_mask, dict):
+            cross_modal_mask = {
+                k: v for k, v in cross_modal_mask.items() if k < int(limit)
+            }
+
     # ------------------------------------------------------------------
     # Load original dataset artefacts (best effort – some tests only require
     # the output files to exist, thus the loose defaults)

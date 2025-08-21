@@ -33,6 +33,7 @@ import logging
 import os
 import pickle
 import sys
+import random
 from types import SimpleNamespace
 from typing import Dict
 
@@ -226,12 +227,45 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Persist per-target inner loop metrics for analysis.",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of competition targets to process.",
+    )
+    parser.add_argument(
+        "--eps",
+        type=float,
+        default=None,
+        help="Override the maximum L-inf perturbation applied to images.",
+    )
+    parser.add_argument(
+        "--iters",
+        type=int,
+        default=None,
+        help="Override the number of optimisation rounds in the inner loop.",
+    )
+    parser.add_argument(
+        "--dry_run",
+        action="store_true",
+        help="Only validate inputs without executing the poisoning pipeline.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
+
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
 
     # ------------------------------------------------------------------
     # Prepare paths
@@ -300,6 +334,8 @@ def main() -> None:
     else:
         with open(comp_path, "r", encoding="utf-8") as f:
             comp_pool = json.load(f)
+    if args.limit is not None:
+        comp_pool = comp_pool[: args.limit]
 
     # ------------------------------------------------------------------
     # 2) Extract saliency masks
@@ -415,14 +451,19 @@ def main() -> None:
         pca_dim=args.pca_dim,
         p_insert=args.p_insert,
         p_replace=args.p_replace,
-        inner_rounds=args.inner_rounds,
+        inner_rounds=args.iters if args.iters is not None else args.inner_rounds,
         align_tau=args.align_tau,
         recalc_after_image=args.recalc_after_image,
         txt_ratio_max=args.txt_ratio_max,
-        img_eps_max=args.img_eps_max,
+        img_eps_max=args.eps if args.eps is not None else args.img_eps_max,
         psnr_min=args.psnr_min,
         log_inner_curves=args.log_inner_curves,
+        limit=args.limit,
     )
+    if args.dry_run:
+        logging.info("Dry run requested; skipping poisoning pipeline execution")
+        return
+    
     poison_info = run_pipeline(pipeline_args)
 
     # ------------------------------------------------------------------
