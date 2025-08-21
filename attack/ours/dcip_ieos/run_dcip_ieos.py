@@ -410,6 +410,22 @@ def main() -> None:
             except Exception:
                 pass
         mask_pool.append(pool_item)
+
+    errors = []
+    for comp, pool_item in zip(comp_pool, mask_pool):
+        missing = []
+        if not pool_item.get("image"):
+            missing.append("image")
+        if not pool_item.get("text"):
+            missing.append("text")
+        if missing:
+            target = comp.get("target")
+            logging.error(
+                "Target %s missing %s data", target, " and ".join(missing)
+            )
+            errors.append(target)
+    if errors:
+        raise RuntimeError("Raw competition pool lacks image/text data")
  
     vis_token_pos = [list(range(len(item.get("image", [])))) for item in mask_pool]
 
