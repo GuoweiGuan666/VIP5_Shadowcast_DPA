@@ -228,6 +228,8 @@ def build_competition_pool(
     kmeans_k: int = 8,
     c_size: int = 20,
     keyword_top: int = 50,
+    id_mode: str = "auto",
+    min_keywords: int = 5,
 ) -> Dict[str, Any]:
     """Build and cache the competition pool for a dataset.
 
@@ -265,39 +267,48 @@ def build_competition_pool(
         Number of nearest neighbours to keep for each target item.
     keyword_top:
         Number of keywords to extract using TF‑IDF.
+    id_mode:
+        One of ``'auto'``, ``'asin'`` or ``'id'`` controlling how identifiers
+        in the popularity files are interpreted. ``'auto'`` prefers ASINs and
+        falls back to numeric IDs via the dataset mapping.
+    min_keywords:
+        Minimum number of keywords required for a target. Targets falling
+        short are supplemented with synthetic placeholders.
     """
 
     # ------------------------------------------------------------------
-    # 1) Parse the popularity file to obtain the set ``H`` of candidate items
-    high_pop: List[int] = []
-    pattern = re.compile(r"ID:\s*(\d+)")
-    with open(pop_path, "r", encoding="utf-8") as f:
-        for line in f:
-            match = pattern.search(line)
-            if match:
-                high_pop.append(int(match.group(1)))
-
-    if not high_pop:
-        raise ValueError(f"No items parsed from {pop_path!r}")
-
-    # ------------------------------------------------------------------
-    # 2) Compute fused embeddings ``E(.)`` for items in ``H`` and targets ``T``
-    if item_loader is None:
-        # simple stub used in the tests – returns empty inputs
-        def item_loader(_item_id: int) -> Dict[str, Any]:
-            return {
-                "image_input": np.zeros(1, dtype=float),
-                "text_input": np.zeros(1, dtype=float),
-                "text": "",
-            }
-        
-    # Resolve dataset metadata for textual fallbacks
+    # Resolve dataset metadata for textual fallbacks and id mapping
     dataset_dir = os.path.join(PROJ_ROOT, "data", dataset)
     meta_path = os.path.join(dataset_dir, "meta.json.gz")
     review_path = os.path.join(dataset_dir, "review_splits.pkl")
+    datamap_path = os.path.join(dataset_dir, "datamaps.json")
 
     meta_titles: Dict[str, str] = {}
     id2asin: Dict[str, str] = {}
+
+    if os.path.exists(datamap_path):
+        try:
+            with open(datamap_path, "r", encoding="utf-8") as f:
+                dm = json.load(f)
+            mapping = None
+            for key in ("item2id", "asin2id", "asin_to_id"):
+                if isinstance(dm.get(key), dict):
+                    mapping = dm[key]
+                    break
+            if mapping:
+                for asin, idx in mapping.items():
+                    id2asin[str(idx)] = str(asin)
+            mapping = None
+            for key in ("id2asin", "id_to_asin"):
+                if isinstance(dm.get(key), dict):
+                    mapping = dm[key]
+                    break
+            if mapping:
+                for idx, asin in mapping.items():
+                    id2asin[str(idx)] = str(asin)
+        except Exception:  # pragma: no cover - corrupted datamap
+            pass
+
     if os.path.exists(meta_path):
         try:
             with gzip.open(meta_path, "rt", encoding="utf-8") as f:
@@ -313,7 +324,7 @@ def build_competition_pool(
                     if asin:
                         meta_titles[asin] = title
                     idx_val = obj.get("id")
-                    if idx_val is not None:
+                    if idx_val is not None and str(idx_val) not in id2asin:
                         id2asin[str(idx_val)] = asin
         except Exception:  # pragma: no cover - corrupted meta file
             pass
@@ -351,23 +362,62 @@ def build_competition_pool(
         except Exception:  # pragma: no cover - corrupted review file
             pass
 
+
+    # ------------------------------------------------------------------
+    # 1) Parse the popularity file to obtain the set ``H`` of candidate items
+    asin_pattern = re.compile(r"Item:\s*([A-Z0-9]+)")
+    id_pattern = re.compile(r"ID:\s*(\d+)")
+    high_pop_ids: List[str] = []
+    high_pop_asins: List[str] = []
+    with open(pop_path, "r", encoding="utf-8") as f:
+        for line in f:
+            asin: Optional[str] = None
+            idx_val: Optional[str] = None
+            if id_mode != "id":
+                m = asin_pattern.search(line)
+                if m:
+                    asin = m.group(1)
+            if id_mode != "asin":
+                m = id_pattern.search(line)
+                if m:
+                    idx_val = m.group(1)
+                    if asin is None:
+                        asin = id2asin.get(idx_val)
+                        if asin is None and id_mode == "id":
+                            asin = idx_val
+            if asin:
+                high_pop_asins.append(asin)
+                high_pop_ids.append(idx_val or asin)
+
+    if not high_pop_asins:
+        raise ValueError(f"No items parsed from {pop_path!r}")
+
+    # ------------------------------------------------------------------
+    # 2) Compute fused embeddings ``E(.)`` for items in ``H`` and targets ``T``
+    if item_loader is None:
+        # simple stub used in the tests – returns empty inputs
+        def item_loader(_item_id: int) -> Dict[str, Any]:
+            return {
+                "image_input": np.zeros(1, dtype=float),
+                "text_input": np.zeros(1, dtype=float),
+                "text": "",
+            }
+
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
     raw_items: Dict[str, Dict[str, Any]] = {}
     missing_text_ids: List[int] = []
-    for item_id in high_pop:
+    for idx, item_id in enumerate(high_pop_ids):
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
-        asin = id2asin.get(str(item_id))
+        asin = high_pop_asins[idx]
         text = str(item.get("text", "") or "")
-        if not text and asin:
-            text = meta_titles.get(asin, "") or review_texts.get(asin, "")
         if not text:
-            text = review_texts.get(str(item_id), "")
+            text = meta_titles.get(asin, "") or review_texts.get(asin, "") or review_texts.get(str(item_id), "")
         if not text:
             missing_sources = []
-            if not (asin and meta_titles.get(asin)):
+            if not meta_titles.get(asin):
                 missing_sources.append("meta.json")
             if not (review_texts.get(asin) or review_texts.get(str(item_id))):
                 missing_sources.append("review_splits.pkl")
@@ -376,9 +426,12 @@ def build_competition_pool(
                 item_id,
                 ", ".join(missing_sources) or "none",
             )
-            missing_text_ids.append(int(item_id))
+            try:
+                missing_text_ids.append(int(str(item_id)))
+            except Exception:
+                pass
 
-        raw_items[str(item_id)] = {
+        raw_items[asin] = {
             "image_input": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
@@ -397,19 +450,19 @@ def build_competition_pool(
 
     fused_tgts: List[np.ndarray] = []
     targets = list(targets)
+    target_asins: List[str] = []
     for item_id in targets:
+        asin = id2asin.get(str(item_id), str(item_id))
+        target_asins.append(asin)
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
-        asin = id2asin.get(str(item_id))
         text = str(item.get("text", "") or "")
-        if not text and asin:
-            text = meta_titles.get(asin, "") or review_texts.get(asin, "")
         if not text:
-            text = review_texts.get(str(item_id), "")
+            text = meta_titles.get(asin, "") or review_texts.get(asin, "") or review_texts.get(str(item_id), "")
         if not text:
             missing_sources = []
-            if not (asin and meta_titles.get(asin)):
+            if not meta_titles.get(asin):
                 missing_sources.append("meta.json")
             if not (review_texts.get(asin) or review_texts.get(str(item_id))):
                 missing_sources.append("review_splits.pkl")
@@ -418,9 +471,12 @@ def build_competition_pool(
                 item_id,
                 ", ".join(missing_sources) or "none",
             )
-            missing_text_ids.append(int(item_id))
+            try:
+                missing_text_ids.append(int(str(item_id)))
+            except Exception:
+                pass
 
-        raw_items[str(item_id)] = {
+        raw_items[asin] = {
             "image_input": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
@@ -444,16 +500,15 @@ def build_competition_pool(
         pca = PCA(n_components=pca_dim, random_state=0)
         combined = np.vstack([high_matrix, tgt_matrix]) if tgt_matrix.size else high_matrix
         combined = pca.fit_transform(combined)
-        high_matrix = combined[: len(high_pop)]
+        high_matrix = combined[: len(high_pop_ids)]
         if tgt_matrix.size:
-            tgt_matrix = combined[len(high_pop) :]
-
+            tgt_matrix = combined[len(high_pop_ids) :]
     # ------------------------------------------------------------------
     # 3) Optional KMeans clustering
     clusters = None
-    labels = np.zeros(len(high_pop), dtype=int)
+    labels = np.zeros(len(high_pop_ids), dtype=int)
     tgt_labels = np.zeros(len(targets), dtype=int)
-    if kmeans_k and KMeans is not None and len(high_pop) >= kmeans_k:
+    if kmeans_k and KMeans is not None and len(high_pop_ids) >= kmeans_k:
         try:
             km = KMeans(n_clusters=kmeans_k, n_init=10, random_state=0)
             labels = km.fit_predict(high_matrix)
@@ -462,7 +517,7 @@ def build_competition_pool(
                 tgt_labels = km.predict(tgt_matrix)
         except Exception:
             clusters = None
-            labels = np.zeros(len(high_pop), dtype=int)
+            labels = np.zeros(len(high_pop_ids), dtype=int)
             tgt_labels = np.zeros(len(targets), dtype=int)
 
     # ------------------------------------------------------------------
@@ -470,13 +525,13 @@ def build_competition_pool(
     pool: Dict[str, Dict[str, Any]] = {}
     keywords: Dict[str, List[str]] = {}
     for idx, item_id in enumerate(targets):
-        if len(high_pop) == 0:
+        if len(high_pop_ids) == 0:
             cluster_members = np.array([], dtype=int)
         else:
             if kmeans_k and KMeans is not None and clusters is not None:
                 cluster_members = np.where(labels == tgt_labels[idx])[0]
             else:
-                cluster_members = np.arange(len(high_pop))
+                cluster_members = np.arange(len(high_pop_ids))
 
         if cluster_members.size:
             emb = tgt_matrix[idx]
@@ -488,13 +543,14 @@ def build_competition_pool(
         else:
             neigh_indices = []
 
-        comp_ids = [int(high_pop[i]) for i in neigh_indices]
+        comp_ids = [high_pop_asins[i] for i in neigh_indices]
         if neigh_indices:
             anchor_vec = high_matrix[neigh_indices].mean(axis=0)
         else:
             anchor_vec = tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
 
-        pool[str(item_id)] = {
+        target_asin = target_asins[idx]
+        pool[target_asin] = {
             "competitors": comp_ids,
             "anchor": anchor_vec.tolist(),
         }
@@ -507,35 +563,37 @@ def build_competition_pool(
                 scores = np.asarray(tfidf.sum(axis=0)).ravel()
                 order = np.argsort(-scores)[:keyword_top]
                 top_terms = vect.get_feature_names_out()[order]
-                keywords[str(item_id)] = top_terms.tolist()
+                keywords[target_asin] = top_terms.tolist()
             except Exception:
                 counts = Counter(" ".join(neigh_texts).split())
-                keywords[str(item_id)] = [w for w, _ in counts.most_common(keyword_top)]
+                keywords[target_asin] = [w for w, _ in counts.most_common(keyword_top)]
         else:
             counts = Counter(" ".join(neigh_texts).split())
-            keywords[str(item_id)] = [w for w, _ in counts.most_common(keyword_top)]
+            keywords[target_asin] = [w for w, _ in counts.most_common(keyword_top)]
 
 
     # ------------------------------------------------------------------
     # 4a) Fill in synthetic keywords for targets lacking mined ones
     synthetic_flags: Dict[str, bool] = {}
-    for item_id in targets:
-        key = str(item_id)
-        kw_list = keywords.get(key, [])
+    for asin in target_asins:
+        kw_list = keywords.get(asin, [])
         if not kw_list:
-            text_src = raw_items.get(key, {}).get("text", "")
+            text_src = raw_items.get(asin, {}).get("text", "")
             tokens = re.findall(r"\w+", text_src)
             if not tokens:
                 tokens = ["item", "product"]
-            keywords[key] = tokens[:keyword_top]
-            synthetic_flags[key] = True
-        else:
-            synthetic_flags[key] = False
+            kw_list = tokens[:keyword_top]
+            synthetic_flags[asin] = True
+        if len(kw_list) < min_keywords:
+            needed = min_keywords - len(kw_list)
+            kw_list.extend(["kw" + str(i) for i in range(needed)])
+            synthetic_flags[asin] = True
+        keywords[asin] = kw_list
 
-    keywords = {
-        key: {"tokens": keywords.get(key, []), "synthetic": synthetic_flags.get(key, False)}
-        for key in keywords.keys()
-    }
+    for asin in target_asins:
+        pool.setdefault(asin, {})["keywords"] = keywords.get(asin, [])
+        if synthetic_flags.get(asin, False):
+            pool[asin]["synthetic"] = True
 
 
     # ------------------------------------------------------------------
@@ -554,9 +612,8 @@ def build_competition_pool(
         except Exception:  # pragma: no cover - corrupted pickle
             pass
 
-    for item_id in list(high_pop) + targets:
-        idx_str = str(item_id)
-        asin = id2asin.get(idx_str, idx_str)
+    for asin in high_pop_asins + target_asins:
+        idx_str = asin
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
         if asin in img_features:
@@ -591,11 +648,10 @@ def build_competition_pool(
 
     data = {
         "dataset": dataset,
-        "high_pop": high_pop,
-        "targets": list(targets),
+        "high_pop": high_pop_asins,
+        "targets": target_asins,
         "clusters": clusters,
         "pool": pool,
-        "keywords": keywords,
         "raw_items": raw_items,
         "missing_text_ids": sorted(set(missing_text_ids)),
         "items": items_meta,
@@ -641,7 +697,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kmeans-k", type=int, default=8, help="number of KMeans clusters")
     parser.add_argument("--no-kmeans", action="store_true", help="disable KMeans clustering")
     parser.add_argument("--c-size", type=int, default=20, help="number of neighbours per target")
-    parser.add_argument("--keyword-top", type=int, default=50, help="number of mined keywords")
+    parser.add_argument("--keywords-top", type=int, default=50, help="number of mined keywords")
+    parser.add_argument("--min-keywords", type=int, default=5, help="minimum keywords per target")
+    parser.add_argument(
+        "--id-mode",
+        choices=["auto", "asin", "id"],
+        default="auto",
+        help="Identifier interpretation for pop/target files",
+    )
     return parser.parse_args()
 
 
@@ -667,12 +730,15 @@ def main() -> None:
     build_competition_pool(
         dataset=args.dataset,
         pop_path=args.pop_path,
+        targets=[],
         model=None,  # Model loading is out of scope for this utility
         cache_dir=args.output_dir,
         pca_dim=args.pca_dim,
         kmeans_k=None if args.no_kmeans else args.kmeans_k,
         c_size=args.c_size,
-        keyword_top=args.keyword_top,
+        keyword_top=args.keywords_top,
+        id_mode=args.id_mode,
+        min_keywords=args.min_keywords,
     )
 
 

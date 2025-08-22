@@ -176,7 +176,7 @@ class SaliencyExtractor:
 
             if cross_attn is None:
                 if warn_fallback:
-                    logging.warning("fallback to outer-product")
+                    logging.warning("WARNING: fallback to outer-product")
                 try:
                     cross_attn = [
                         [abs(i_val * t_val) for t_val in text_vec]
@@ -229,11 +229,11 @@ class SaliencyExtractor:
 
             img_mask = _topk_mask(img_scores, top_p)
             if not any(img_mask) and len(img_mask) > 0:
-                logging.warning("empty image mask; randomly selecting one token")
+                logging.warning("WARNING: empty image mask; randomly selecting one token")
                 img_mask[random.randrange(len(img_mask))] = True
             txt_mask = _topk_mask(txt_scores, top_q)
             if not any(txt_mask) and len(txt_mask) > 0:
-                logging.warning("empty text mask; randomly selecting one token")
+                logging.warning("WARNING: empty text mask; randomly selecting one token")
                 txt_mask[random.randrange(len(txt_mask))] = True
 
             if pos_list is not None:

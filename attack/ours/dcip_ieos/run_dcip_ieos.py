@@ -279,11 +279,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--min-keywords",
         type=int,
-        default=20,
+        default=5,
         help=(
             "Minimum number of keywords required for a target; entries with fewer "
             "keywords are skipped with a warning. Use 0 when the dataset lacks text."
         ),
+    )
+    parser.add_argument(
+        "--keywords-top",
+        type=int,
+        default=50,
+        help="Number of keywords to mine per target.",
+    )
+    parser.add_argument(
+        "--id-mode",
+        choices=["auto", "asin", "id"],
+        default="auto",
+        help="Identifier interpretation for target/pop files.",
     )
     parser.add_argument(
         "--seed",
@@ -356,23 +368,62 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Select target IDs
     # ------------------------------------------------------------------
-    def _parse_targets(path: str) -> list[int]:
-        ids: list[int] = []
-        pattern = re.compile(r"ID:\s*(\d+)")
+    dataset_dir = os.path.join(args.data_root, args.dataset)
+    datamap_path = os.path.join(dataset_dir, "datamaps.json")
+    id2asin: Dict[str, str] = {}
+    if os.path.exists(datamap_path):
+        try:
+            with open(datamap_path, "r", encoding="utf-8") as f:
+                dm = json.load(f)
+            mapping = None
+            for key in ("item2id", "asin2id", "asin_to_id"):
+                if isinstance(dm.get(key), dict):
+                    mapping = dm[key]
+                    break
+            if mapping:
+                for asin, idx in mapping.items():
+                    id2asin[str(idx)] = str(asin)
+            mapping = None
+            for key in ("id2asin", "id_to_asin"):
+                if isinstance(dm.get(key), dict):
+                    mapping = dm[key]
+                    break
+            if mapping:
+                for idx, asin in mapping.items():
+                    id2asin[str(idx)] = str(asin)
+        except Exception:
+            pass
+    def _parse_targets(path: str) -> list[tuple[str, str]]:
+        entries: list[tuple[str, str]] = []
+        asin_pat = re.compile(r"Item:\s*([A-Z0-9]+)")
+        id_pat = re.compile(r"ID:\s*(\d+)")
         with open(path, "r", encoding="utf-8") as fh:
             for line in fh:
-                m = pattern.search(line)
-                if m:
-                    ids.append(int(m.group(1)))
-        return ids
+                asin = None
+                idx_val = None
+                if args.id_mode != "id":
+                    m = asin_pat.search(line)
+                    if m:
+                        asin = m.group(1)
+                if args.id_mode != "asin":
+                    m = id_pat.search(line)
+                    if m:
+                        idx_val = m.group(1)
+                        if asin is None:
+                            asin = id2asin.get(idx_val)
+                            if asin is None and args.id_mode == "id":
+                                asin = idx_val
+                if asin:
+                    entries.append((idx_val or asin, asin))
+        return entries
 
     if args.targets_path:
         if not os.path.isfile(args.targets_path):
             logging.error("Targets file '%s' does not exist", args.targets_path)
             return
-        target_ids = _parse_targets(args.targets_path)
+        entries = _parse_targets(args.targets_path)
         if args.limit is not None:
-            target_ids = target_ids[: args.limit]
+            entries = entries[: args.limit]
     else:
         pattern = os.path.join(
             PROJ_ROOT,
@@ -385,7 +436,7 @@ def main() -> None:
         if not low_files:
             logging.error("No low-pop files found for pattern %s", pattern)
             return
-        candidates: list[int] = []
+        candidates: list[tuple[str, str]] = []
         for path in low_files:
             candidates.extend(_parse_targets(path))
         if not candidates:
@@ -393,9 +444,12 @@ def main() -> None:
             return
         sample_size = args.limit or len(candidates)
         sample_size = min(sample_size, len(candidates))
-        target_ids = random.sample(candidates, sample_size)
+        entries = random.sample(candidates, sample_size)
 
-    if not target_ids:
+    target_loader_ids = [e[0] for e in entries]
+    target_ids = [e[1] for e in entries]
+
+    if not target_loader_ids:
         logging.error("No target IDs available")
         return
 
@@ -415,7 +469,7 @@ def main() -> None:
         from attack.ours.dcip_ieos import pool_miner
 
         logging.info(
-            "Building competition pool: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
+            "Building competition pool: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s id_mode=%s keywords_top=%d",
             args.pop_path,
             args.k,
             args.c,
@@ -423,11 +477,13 @@ def main() -> None:
             args.w_txt,
             args.use_pca,
             args.pca_dim,
+            args.id_mode,
+            args.keywords_top,
         )
         data = pool_miner.build_competition_pool(
             dataset=args.dataset,
             pop_path=args.pop_path,
-            targets=target_ids,
+            targets=target_loader_ids,
             model=None,
             cache_dir=args.cache_dir,
             item_loader=None,
@@ -436,12 +492,14 @@ def main() -> None:
             pca_dim=args.pca_dim if args.use_pca else None,
             kmeans_k=args.k,
             c_size=args.c,
+            keyword_top=args.keywords_top,
+            id_mode=args.id_mode,
+            min_keywords=args.min_keywords,
         )
         pool_dict = data.get("pool", {})
-        keywords = data.get("keywords", {})
         raw_items = data.get("raw_items", {})
         raw_map = {
-            int(tid) if str(tid).isdigit() else tid: {
+            tid: {
                 "image_input": info.get("image_input", []),
                 "text_input": info.get("text_input", []),
                 "text": info.get("text", ""),
@@ -450,16 +508,11 @@ def main() -> None:
         }
         comp_pool = []
         for tid, info in pool_dict.items():
-            kw_entry = keywords.get(str(tid), {})
-            if isinstance(kw_entry, dict):
-                kw_tokens = kw_entry.get("tokens", [])
-                synthetic = bool(kw_entry.get("synthetic", False))
-            else:
-                kw_tokens = kw_entry
-                synthetic = False
+            kw_tokens = info.get("keywords", [])
+            synthetic = bool(info.get("synthetic", False))
             comp_pool.append(
                 {
-                    "target": int(tid) if str(tid).isdigit() else tid,
+                    "target": tid,
                     "neighbors": info.get("competitors", []),
                     "anchor": info.get("anchor", []),
                     "keywords": kw_tokens,
@@ -510,23 +563,29 @@ def main() -> None:
     
     # Summarise the competition pool before proceeding
     unique_ids = set()
+    neighbour_counts: list[int] = []
+    keyword_counts: list[int] = []
     for entry in comp_pool:
         unique_ids.add(entry.get("target"))
         neighbours = entry.get("neighbors") or entry.get("competitors", [])
+        neighbour_counts.append(len(neighbours))
+        keyword_counts.append(len(entry.get("keywords", [])))
         unique_ids.update(neighbours)
     pool_size = len(unique_ids)
-    num_targets = len({e.get("target") for e in comp_pool})
-    first = comp_pool[0]
-    anchor_dim = len(first.get("anchor", []))
-    kw_field = first.get("keywords", [])
-    keyword_cnt = len(kw_field.get("tokens", [])) if isinstance(kw_field, dict) else len(kw_field)
+    num_targets = len(comp_pool)
+    anchor_dim = len(comp_pool[0].get("anchor", [])) if comp_pool else 0
+    avg_c = sum(neighbour_counts) / num_targets if num_targets else 0.0
+    kw_mean = sum(keyword_counts) / num_targets if num_targets else 0.0
+    kw_med = sorted(keyword_counts)[num_targets // 2] if num_targets else 0
+
     logging.info(
-        "Pool summary: size=%d targets=%d neighbours=%d anchor_dim=%d keywords=%d",
+        "Pool summary: size=%d targets=%d avg|C|=%.1f anchor_dim=%d keywords(mean/med)=%.1f/%d",
         pool_size,
         num_targets,
-        args.c,
+        avg_c,
         anchor_dim,
-        keyword_cnt,
+        kw_mean,
+        kw_med,
     )
 
     # ------------------------------------------------------------------
