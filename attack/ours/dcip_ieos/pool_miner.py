@@ -290,6 +290,66 @@ def build_competition_pool(
                 "text_input": np.zeros(1, dtype=float),
                 "text": "",
             }
+        
+    # Resolve dataset metadata for textual fallbacks
+    dataset_dir = os.path.join(PROJ_ROOT, "data", dataset)
+    meta_path = os.path.join(dataset_dir, "meta.json.gz")
+    review_path = os.path.join(dataset_dir, "review_splits.pkl")
+
+    meta_titles: Dict[str, str] = {}
+    id2asin: Dict[str, str] = {}
+    if os.path.exists(meta_path):
+        try:
+            with gzip.open(meta_path, "rt", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:  # pragma: no cover - fallback for non-JSON lines
+                        obj = eval(line)
+                    asin = str(obj.get("asin") or obj.get("id") or "")
+                    title = str(obj.get("title", ""))
+                    if asin:
+                        meta_titles[asin] = title
+                    idx_val = obj.get("id")
+                    if idx_val is not None:
+                        id2asin[str(idx_val)] = asin
+        except Exception:  # pragma: no cover - corrupted meta file
+            pass
+
+    review_texts: Dict[str, str] = {}
+    if os.path.exists(review_path):
+        try:
+            with open(review_path, "rb") as f:
+                reviews = pickle.load(f)
+
+            def _collect(container: Any) -> None:
+                if isinstance(container, dict):
+                    for k, v in container.items():
+                        if isinstance(v, (list, tuple)) and v:
+                            v0 = v[0]
+                        else:
+                            v0 = v
+                        if isinstance(v0, dict):
+                            txt = str(v0.get("text") or v0.get("reviewText") or "")
+                        else:
+                            txt = str(v0)
+                        review_texts[str(k)] = txt
+                elif isinstance(container, list):
+                    for v in container:
+                        if isinstance(v, dict):
+                            k = v.get("asin") or v.get("item") or v.get("id")
+                            txt = str(v.get("text") or v.get("reviewText") or "")
+                            if k is not None:
+                                review_texts[str(k)] = txt
+
+            _collect(reviews)
+            if isinstance(reviews, dict):
+                for val in reviews.values():
+                    _collect(val)
+        except Exception:  # pragma: no cover - corrupted review file
+            pass
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
@@ -298,7 +358,13 @@ def build_competition_pool(
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
-        text = str(item.get("text", ""))
+        text = str(item.get("text", "") or "")
+        if not text:
+            asin = id2asin.get(str(item_id))
+            if asin:
+                text = meta_titles.get(asin, "") or review_texts.get(asin, "")
+            if not text:
+                text = review_texts.get(str(item_id), "")
 
         raw_items[str(item_id)] = {
             "image_input": img_in.tolist(),
@@ -323,7 +389,13 @@ def build_competition_pool(
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
-        text = str(item.get("text", ""))
+        text = str(item.get("text", "") or "")
+        if not text:
+            asin = id2asin.get(str(item_id))
+            if asin:
+                text = meta_titles.get(asin, "") or review_texts.get(asin, "")
+            if not text:
+                text = review_texts.get(str(item_id), "")
 
         raw_items[str(item_id)] = {
             "image_input": img_in.tolist(),
@@ -424,65 +496,8 @@ def build_competition_pool(
     # ------------------------------------------------------------------
     # 4b) Gather per-item metadata (title and image features)
     items_meta: Dict[str, Dict[str, Any]] = {}
-    dataset_dir = os.path.join(PROJ_ROOT, "data", dataset)
-    meta_path = os.path.join(dataset_dir, "meta.json.gz")
-    review_path = os.path.join(dataset_dir, "review_splits.pkl")
     img_dict_path = os.path.join(dataset_dir, "item2img_dict.pkl")
 
-    meta_titles: Dict[str, str] = {}
-    id2asin: Dict[str, str] = {}
-    if os.path.exists(meta_path):
-        try:
-            with gzip.open(meta_path, "rt", encoding="utf-8") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except Exception:  # pragma: no cover - fallback for non-JSON lines
-                        obj = eval(line)
-                    asin = str(obj.get("asin") or obj.get("id") or "")
-                    title = str(obj.get("title", ""))
-                    if asin:
-                        meta_titles[asin] = title
-                    idx_val = obj.get("id")
-                    if idx_val is not None:
-                        id2asin[str(idx_val)] = asin
-        except Exception:  # pragma: no cover - corrupted meta file
-            pass
-
-    review_texts: Dict[str, str] = {}
-    if os.path.exists(review_path):
-        try:
-            with open(review_path, "rb") as f:
-                reviews = pickle.load(f)
-
-            def _collect(container: Any) -> None:
-                if isinstance(container, dict):
-                    for k, v in container.items():
-                        if isinstance(v, (list, tuple)) and v:
-                            v0 = v[0]
-                        else:
-                            v0 = v
-                        if isinstance(v0, dict):
-                            txt = str(v0.get("text") or v0.get("reviewText") or "")
-                        else:
-                            txt = str(v0)
-                        review_texts[str(k)] = txt
-                elif isinstance(container, list):
-                    for v in container:
-                        if isinstance(v, dict):
-                            k = v.get("asin") or v.get("item") or v.get("id")
-                            txt = str(v.get("text") or v.get("reviewText") or "")
-                            if k is not None:
-                                review_texts[str(k)] = txt
-
-            _collect(reviews)
-            if isinstance(reviews, dict):
-                for val in reviews.values():
-                    _collect(val)
-        except Exception:  # pragma: no cover - corrupted review file
-            pass
 
     img_features: Dict[str, List[float]] = {}
     if os.path.exists(img_dict_path):
