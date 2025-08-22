@@ -452,6 +452,26 @@ def main() -> None:
     if not comp_pool:
         logging.error("No target IDs matched the competition pool")
         return
+    
+    # Summarise the competition pool before proceeding
+    unique_ids = set()
+    for entry in comp_pool:
+        unique_ids.add(entry.get("target"))
+        neighbours = entry.get("neighbors") or entry.get("competitors", [])
+        unique_ids.update(neighbours)
+    pool_size = len(unique_ids)
+    num_targets = len({e.get("target") for e in comp_pool})
+    first = comp_pool[0]
+    anchor_dim = len(first.get("anchor", []))
+    keyword_cnt = len(first.get("keywords", []))
+    logging.info(
+        "Pool summary: size=%d targets=%d neighbours=%d anchor_dim=%d keywords=%d",
+        pool_size,
+        num_targets,
+        args.c,
+        anchor_dim,
+        keyword_cnt,
+    )
 
     item_map: Dict[Any, Dict[str, Any]] = raw_map
 
