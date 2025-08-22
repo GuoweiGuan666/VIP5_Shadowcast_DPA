@@ -26,6 +26,10 @@
     "anchor": [
       0.0
     ],
-    "keywords": []
+    "keywords": [
+      "item",
+      "product"
+    ],
+    "synthetic": true
   }
 ]
