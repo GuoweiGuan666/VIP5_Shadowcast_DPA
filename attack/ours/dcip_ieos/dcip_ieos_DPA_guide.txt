@@ -87,14 +87,13 @@ python attack/ours/dcip_ieos/run_dcip_ieos.py \
 # 0822
 
 python attack/ours/dcip_ieos/run_dcip_ieos.py \
-    --dataset clothing \
-    --mr 0.1 \
-    --pop-path analysis/results/clothing/high_pop_items_clothing_highcount_100.txt \
-    --targets-path /scratch/guanguowei/Code/MyWork/VIP5_Shadowcast_DPA/analysis/results/clothing/low_pop_items_clothing_lowcount_1.txt \
-    --cache-dir attack/ours/dcip_ieos/caches \
-    --limit 20 --inner_rounds 4 --align_tau 5e-4 --recalc_after_image \
-    --txt_ratio_max 0.08 --img_eps_max 0.12 \
-    --mask-top-p 0.12 --mask-top-q 0.06 --eps 0.06 --iters 30 \
-    --psnr_min 32 --dry_run --seed 2022
-
-
+  --dataset clothing --mr 0.1 \
+  --victim-ckpt snap/clothing/0805/NoAttack_0.0_clothing-vitb32-2-8-20/BEST_EVAL_LOSS.pth \
+  --pop-path analysis/results/clothing/high_pop_items_clothing_highcount_100.txt \
+  --targets-path analysis/results/clothing/low_pop_items_clothing_lowcount_1.txt \
+  --cache-dir attack/ours/dcip_ieos/caches \
+  --id-mode auto --min-keywords 0 --keywords-top 30 \
+  --limit 20 --inner_rounds 3 --align_tau 5e-4 --recalc_after_image \
+  --txt_ratio_max 0.08 --img_eps_max 0.12 \
+  --mask-top-p 0.15 --mask-top-q 0.08 --eps 0.06 --iters 20 --psnr_min 32 \
+  --dry_run --seed 2022

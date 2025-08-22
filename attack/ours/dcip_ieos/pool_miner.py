@@ -36,6 +36,7 @@ import json
 import logging
 import os
 import re
+import glob
 import gzip
 import pickle
 from collections import Counter
@@ -153,7 +154,8 @@ class PoolMiner:
 
             # Anchor embedding
             if neighbour_indices:
-                anchor_vec = embeddings[neighbour_indices].mean(axis=0)
+                vecs = embeddings[neighbour_indices]
+                anchor_vec = np.mean(vecs, axis=0)
             else:
                 anchor_vec = np.zeros_like(embeddings[0])
 
@@ -396,12 +398,35 @@ def build_competition_pool(
     # 2) Compute fused embeddings ``E(.)`` for items in ``H`` and targets ``T``
     if item_loader is None:
         # simple stub used in the tests – returns empty inputs
-        def item_loader(_item_id: int) -> Dict[str, Any]:
+        def item_loader(_item_id: int) -> Dict[str, Any]:  # type: ignore
             return {
                 "image_input": np.zeros(1, dtype=float),
                 "text_input": np.zeros(1, dtype=float),
                 "text": "",
             }
+        
+    # Preload image feature dictionaries used as fallbacks when the item loader
+    # fails to supply ``image_input``.  We try the main mapping first followed by
+    # any shadowcast variations under ``poisoned``.
+    img_features: Dict[str, np.ndarray] = {}
+    img_feat_dim = 0
+    img_dicts = [os.path.join(dataset_dir, "item2img_dict.pkl")]
+    img_dicts += sorted(
+        glob.glob(os.path.join(dataset_dir, "poisoned", "item2img_dict_shadowcast_mr*.pkl"))
+    )
+    for path in img_dicts:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = pickle.load(f)
+            for k, v in data.items():
+                vec = np.asarray(v, dtype=float).ravel()
+                if img_feat_dim == 0:
+                    img_feat_dim = len(vec)
+                img_features[str(k).upper()] = vec
+        except Exception:  # pragma: no cover - corrupted pickle
+            logging.warning("Failed to load image feature dict %s", path)
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
@@ -409,7 +434,16 @@ def build_competition_pool(
     missing_text_ids: List[int] = []
     for idx, item_id in enumerate(high_pop_ids):
         item = item_loader(item_id) or {}
-        img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
+        img_in = np.asarray(item.get("image_input", []), dtype=float)
+        if img_in.size == 0:
+            vec = img_features.get(asin.upper()) or img_features.get(str(item_id).upper())
+            if vec is not None:
+                img_in = vec.copy()
+            else:
+                if img_feat_dim == 0:
+                    img_feat_dim = 1
+                img_in = np.zeros(img_feat_dim, dtype=float)
+                logging.warning("No image feature found for item %s", item_id)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
         asin = high_pop_asins[idx]
         text = str(item.get("text", "") or "")
@@ -433,6 +467,7 @@ def build_competition_pool(
 
         raw_items[asin] = {
             "image_input": img_in.tolist(),
+            "image": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
         }
@@ -455,7 +490,16 @@ def build_competition_pool(
         asin = id2asin.get(str(item_id), str(item_id))
         target_asins.append(asin)
         item = item_loader(item_id) or {}
-        img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
+        img_in = np.asarray(item.get("image_input", []), dtype=float)
+        if img_in.size == 0:
+            vec = img_features.get(asin.upper()) or img_features.get(str(item_id).upper())
+            if vec is not None:
+                img_in = vec.copy()
+            else:
+                if img_feat_dim == 0:
+                    img_feat_dim = 1
+                img_in = np.zeros(img_feat_dim, dtype=float)
+                logging.warning("No image feature found for item %s", item_id)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
         text = str(item.get("text", "") or "")
         if not text:
@@ -478,6 +522,7 @@ def build_competition_pool(
 
         raw_items[asin] = {
             "image_input": img_in.tolist(),
+            "image": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
         }
@@ -545,7 +590,8 @@ def build_competition_pool(
 
         comp_ids = [high_pop_asins[i] for i in neigh_indices]
         if neigh_indices:
-            anchor_vec = high_matrix[neigh_indices].mean(axis=0)
+            vecs = high_matrix[neigh_indices]
+            anchor_vec = np.mean(vecs, axis=0)
         else:
             anchor_vec = tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
 
@@ -599,45 +645,35 @@ def build_competition_pool(
     # ------------------------------------------------------------------
     # 4b) Gather per-item metadata (title and image features)
     items_meta: Dict[str, Dict[str, Any]] = {}
-    img_dict_path = os.path.join(dataset_dir, "item2img_dict.pkl")
-
-
-    img_features: Dict[str, List[float]] = {}
-    if os.path.exists(img_dict_path):
-        try:
-            with open(img_dict_path, "rb") as f:
-                img_map = pickle.load(f)
-            for k, v in img_map.items():
-                img_features[str(k)] = np.asarray(v, dtype=float).ravel().tolist()
-        except Exception:  # pragma: no cover - corrupted pickle
-            pass
 
     for asin in high_pop_asins + target_asins:
         idx_str = asin
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
-        if asin in img_features:
-            feat = img_features[asin]
-        else:
+        key = asin.upper()
+        vec = img_features.get(key) or img_features.get(str(idx_str).upper())
+        if vec is None:
             npy_candidates = [
                 os.path.join(dataset_dir, f"{asin}.npy"),
                 os.path.join(dataset_dir, f"{idx_str}.npy"),
                 os.path.join(dataset_dir, "image_features", f"{asin}.npy"),
             ]
-            feat_array = None
             for path in npy_candidates:
                 if os.path.exists(path):
                     try:
-                        feat_array = np.load(path)
+                        arr = np.load(path)
+                        vec = np.asarray(arr, dtype=float).ravel()
+                        if img_feat_dim == 0:
+                            img_feat_dim = len(vec)
                         break
                     except Exception:  # pragma: no cover - invalid npy
-                        feat_array = None
-            if feat_array is not None:
-                feat = np.asarray(feat_array, dtype=float).ravel().tolist()
-            else:
-                feat = []
-
-        items_meta[asin] = {"title": title, "image_feat": feat}
+                                                vec = None
+        if vec is None:
+            if img_feat_dim == 0:
+                img_feat_dim = 1
+            logging.warning("[ImageFeat] synth for %s", key)
+            vec = np.zeros(img_feat_dim, dtype=float)
+        items_meta[asin] = {"title": title, "image_feat": vec.tolist()}
 
     # ------------------------------------------------------------------
     # 5) Persist to disk

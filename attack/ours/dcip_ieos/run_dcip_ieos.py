@@ -681,7 +681,10 @@ def main() -> None:
     mask_pool = []
     for entry in comp_pool:
         item = raw_map.get(entry.get("target"), {})
-        pool_item = {"image": item.get("image", []), "text": item.get("text", "")}
+        pool_item = {
+            "image": item.get("image") or item.get("image_input") or [],
+            "text": item.get("text", ""),
+        }
         if victim_model is not None:
             try:
                 outputs = victim_model(
