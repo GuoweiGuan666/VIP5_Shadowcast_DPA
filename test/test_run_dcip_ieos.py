@@ -120,6 +120,54 @@ def test_build_competition_pool_includes_raw_items(tmp_path):
     assert data["raw_items"]["1"]["image_input"] == [1.0, 2.0]
 
 
+
+@pytest.mark.skipif(np is None, reason="numpy is required for this test")
+def test_build_competition_pool_collects_item_metadata(tmp_path, monkeypatch):
+    dataset = "demo"
+    data_root = tmp_path
+    dataset_dir = data_root / "data" / dataset
+    dataset_dir.mkdir(parents=True)
+
+    pop_path = tmp_path / "pop.txt"
+    pop_path.write_text("Item: A1 (ID: 1)\n", encoding="utf-8")
+
+    # create meta.json.gz with title information
+    import gzip
+    meta_path = dataset_dir / "meta.json.gz"
+    with gzip.open(meta_path, "wt", encoding="utf-8") as f:
+        f.write(json.dumps({"asin": "A1", "title": "Hello", "id": 1}))
+
+    # image features mapping
+    with (dataset_dir / "item2img_dict.pkl").open("wb") as f:
+        pickle.dump({"A1": np.array([0.1, 0.2])}, f)
+
+    # patch project root so build_competition_pool can locate files
+    from attack.ours.dcip_ieos import pool_miner as pm
+    monkeypatch.setattr(pm, "PROJ_ROOT", str(data_root))
+
+    def loader(_item_id: int):
+        return {
+            "image_input": np.array([0.0]),
+            "text_input": np.array([0.0]),
+            "text": "",
+        }
+
+    data = build_competition_pool(
+        dataset=dataset,
+        pop_path=str(pop_path),
+        model=None,
+        cache_dir=str(tmp_path),
+        item_loader=loader,
+        kmeans_k=0,
+        c_size=1,
+    )
+
+    assert "items" in data
+    assert data["items"]["A1"]["title"] == "Hello"
+    assert data["items"]["A1"]["image_feat"] == [0.1, 0.2]
+
+
+
 @pytest.mark.skipif(np is None, reason="numpy is required for this test")
 def test_run_dcip_ieos_uses_raw_items(tmp_path, monkeypatch):
     data_root = tmp_path / "data"
