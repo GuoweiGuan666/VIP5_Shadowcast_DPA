@@ -352,6 +352,7 @@ def main() -> None:
     )
     
     raw_map: Dict[Any, Dict[str, Any]] = {}
+    items_meta: Dict[str, Any] = {}
     if args.pool_json is None:
         from attack.ours.dcip_ieos import pool_miner
 
@@ -397,6 +398,7 @@ def main() -> None:
             }
             for tid, info in pool_dict.items()
         ]
+        items_meta = data.get("items", {})
         with open(comp_path, "w", encoding="utf-8") as f:
             json.dump(comp_pool, f, ensure_ascii=False, indent=2)
     else:
@@ -472,6 +474,51 @@ def main() -> None:
         anchor_dim,
         keyword_cnt,
     )
+
+    # ------------------------------------------------------------------
+    # Inspect a couple of entries and validate their structure
+    # ------------------------------------------------------------------
+    image_dim = None
+    for meta in items_meta.values():
+        feat = meta.get("image_feat")
+        if feat:
+            image_dim = len(feat)
+            break
+
+    samples = comp_pool[: min(2, len(comp_pool))]
+    print("Sample competition pool entries:")
+    for entry in samples:
+        print(json.dumps(entry, ensure_ascii=False, indent=2))
+        tgt = entry.get("target")
+        neighbors = entry.get("neighbors") or entry.get("competitors", [])
+        anchor = entry.get("anchor", [])
+        kw = entry.get("keywords", [])
+        if len(neighbors) != args.c:
+            msg = (
+                f"Target {tgt} has {len(neighbors)} neighbours; expected {args.c}"
+            )
+            logging.error(msg)
+            raise AssertionError(msg)
+        if len(anchor) != anchor_dim:
+            msg = (
+                f"Target {tgt} anchor length {len(anchor)} != expected {anchor_dim}"
+            )
+            logging.error(msg)
+            raise AssertionError(msg)
+        if len(kw) < 20:
+            msg = (
+                f"Target {tgt} has only {len(kw)} keywords (<20)"
+            )
+            logging.error(msg)
+            raise AssertionError(msg)
+        if image_dim is not None:
+            img_feat = items_meta.get(str(tgt), {}).get("image_feat")
+            if img_feat and len(img_feat) != image_dim:
+                msg = (
+                    f"Target {tgt} image_feat length {len(img_feat)} != expected {image_dim}"
+                )
+                logging.error(msg)
+                raise AssertionError(msg)
 
     item_map: Dict[Any, Dict[str, Any]] = raw_map
 
