@@ -39,6 +39,8 @@ import os
 import pickle
 import sys
 import random
+import glob
+import re
 from types import SimpleNamespace
 from typing import Any, Dict
 
@@ -126,8 +128,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--pop-path",
-        default=None,
+        required=True,
         help="High popularity items file used for competition pool mining.",
+    )
+    parser.add_argument(
+        "--targets-path",
+        default=None,
+        help="Optional low popularity items file containing target IDs.",
     )
     parser.add_argument(
         "--k",
@@ -333,147 +340,153 @@ def main() -> None:
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    # ------------------------------------------------------------------
-    # Prepare paths
-    # ------------------------------------------------------------------
-    if args.pool_json is None:
-        args.pool_json = os.path.join(args.data_root, args.dataset, "pool.json")
-    os.makedirs(args.cache_dir, exist_ok=True)
-
-    # Parse and validate the raw competition pool file before proceeding.
-    raw_items = _load_validated_pool(args.pool_json)
-
-    # Pre-load raw item metadata for the custom item loader.  Validation above
-    # guarantees the presence of non-empty ``image_input``/``text`` fields in
-    # ``raw_items`` but lookups may still fail, hence the fallbacks below.
-    item_map: Dict[Any, Dict[str, Any]] = {}
-    if isinstance(raw_items, list):
-        for entry in raw_items:
-            iid = entry.get("id")
-            if iid is not None:
-                key = int(iid) if str(iid).isdigit() else iid
-                item_map[key] = entry
-    elif isinstance(raw_items, dict):
-        for key, entry in raw_items.items():
-            iid = entry.get("id", key)
-            key = int(iid) if str(iid).isdigit() else iid
-            item_map[key] = entry
-
-    def item_loader(item_id: int) -> Dict[str, Any]:
-        """Return raw ``image_input`` and ``text`` fields for ``item_id``.
-
-        The loader looks up the item inside ``item_map`` populated from the
-        dataset's ``pool.json``.  When a field is missing, a minimal fallback is
-        used to keep the downstream logic operational.
-        """
-
-        item = item_map.get(item_id)
-        if item is None and isinstance(item_id, str) and item_id.isdigit():
-            item = item_map.get(int(item_id))
-        if not item:
-            return {}
-
-        img = (
-            item.get("image_input")
-            or item.get("image")
-            or item.get("image_feat")
-            or []
-        )
-        txt_in = item.get("text_input") or item.get("text_feat") or []
-        text = item.get("text") or item.get("title") or ""
-
-        return {"image_input": img, "text_input": txt_in, "text": text}
-
+    
     # ------------------------------------------------------------------
     # 1) Mine or load the competition pool
     # ------------------------------------------------------------------
 
+    os.makedirs(args.cache_dir, exist_ok=True)
+
     comp_path = os.path.join(
         args.cache_dir, f"competition_pool_{args.dataset}.json"
     )
-    logging.info(
-        "Pool params: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
-        args.pop_path,
-        args.k,
-        args.c,
-        args.w_img,
-        args.w_txt,
-        args.use_pca,
-        args.pca_dim,
-    )
-    raw_pool = []
+    
     raw_map: Dict[Any, Dict[str, Any]] = {}
-    if not os.path.isfile(comp_path):
-        if args.pop_path:
-            from attack.ours.dcip_ieos.pool_miner import build_competition_pool
+    if args.pool_json is None:
+        from attack.ours.dcip_ieos import pool_miner
 
-            data = build_competition_pool(
-                dataset=args.dataset,
-                pop_path=args.pop_path,
-                model=None,
-                cache_dir=args.cache_dir,
-                item_loader=item_loader,
-                w_img=args.w_img,
-                w_txt=args.w_txt,
-                pca_dim=args.pca_dim if args.use_pca else None,
-                kmeans_k=args.k,
-                c_size=args.c,
-            )
-            pool_dict = data.get("pool", {})
-            keywords = data.get("keywords", {})
-            raw_items = data.get("raw_items", {})
-            raw_map = {
-                int(tid) if str(tid).isdigit() else tid: {
-                    "image": info.get("image_input", []),
-                    "text": info.get("text", ""),
-                }
-                for tid, info in raw_items.items()
+        logging.info(
+            "Building competition pool: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
+            args.pop_path,
+            args.k,
+            args.c,
+            args.w_img,
+            args.w_txt,
+            args.use_pca,
+            args.pca_dim,
+        )
+        data = pool_miner.build_competition_pool(
+            dataset=args.dataset,
+            pop_path=args.pop_path,
+            model=None,
+            cache_dir=args.cache_dir,
+            item_loader=None,
+            w_img=args.w_img,
+            w_txt=args.w_txt,
+            pca_dim=args.pca_dim if args.use_pca else None,
+            kmeans_k=args.k,
+            c_size=args.c,
+        )
+        pool_dict = data.get("pool", {})
+        keywords = data.get("keywords", {})
+        raw_items = data.get("raw_items", {})
+        raw_map = {
+            int(tid) if str(tid).isdigit() else tid: {
+                "image_input": info.get("image_input", []),
+                "text_input": info.get("text_input", []),
+                "text": info.get("text", ""),
             }
-            comp_pool = [
-                {
-                    "target": int(tid) if str(tid).isdigit() else tid,
-                    "neighbors": info.get("competitors", []),
-                    "anchor": info.get("anchor", []),
-                    "keywords": keywords.get(str(tid), []),
-                }
-                for tid, info in pool_dict.items()
-            ]
-            with open(comp_path, "w", encoding="utf-8") as f:
-                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
-        else:
-            with open(args.pool_json, "r", encoding="utf-8") as f:
-                raw_pool = json.load(f)
-            miner = PoolMiner(args.cache_dir, args.dataset)
-            comp_pool = PoolMiner.build_competition_pool(
-                raw_pool, top_k=args.pool_topk
-            )
-            for entry in comp_pool:
-                entry["neighbors"] = entry.pop("competitors", [])
-            with open(comp_path, "w", encoding="utf-8") as f:
-                json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+            for tid, info in raw_items.items()
+        }
+        comp_pool = [
+            {
+                "target": int(tid) if str(tid).isdigit() else tid,
+                "neighbors": info.get("competitors", []),
+                "anchor": info.get("anchor", []),
+                "keywords": keywords.get(str(tid), []),
+            }
+            for tid, info in pool_dict.items()
+        ]
+        with open(comp_path, "w", encoding="utf-8") as f:
+            json.dump(comp_pool, f, ensure_ascii=False, indent=2)
     else:
+        comp_path = args.pool_json
+        if not os.path.isfile(comp_path):
+            logging.error("Competition pool file '%s' does not exist", comp_path)
+            return
         with open(comp_path, "r", encoding="utf-8") as f:
             comp_pool = json.load(f)
-    if args.limit is not None:
-        comp_pool = comp_pool[: args.limit]
+    # ------------------------------------------------------------------
+    # Select target IDs
+    # ------------------------------------------------------------------
+    def _parse_targets(path: str) -> list[int]:
+        ids: list[int] = []
+        pattern = re.compile(r"ID:\s*(\d+)")
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                m = pattern.search(line)
+                if m:
+                    ids.append(int(m.group(1)))
+        return ids
+
+    if args.targets_path:
+        if not os.path.isfile(args.targets_path):
+            logging.error("Targets file '%s' does not exist", args.targets_path)
+            return
+        target_ids = _parse_targets(args.targets_path)
+        if args.limit is not None:
+            target_ids = target_ids[: args.limit]
+    else:
+        pattern = os.path.join(
+            PROJ_ROOT,
+            "analysis",
+            "results",
+            args.dataset,
+            "low_pop_items_*.txt",
+        )
+        low_files = glob.glob(pattern)
+        if not low_files:
+            logging.error("No low-pop files found for pattern %s", pattern)
+            return
+        candidates: list[int] = []
+        for path in low_files:
+            candidates.extend(_parse_targets(path))
+        if not candidates:
+            logging.error("Candidate target set is empty in %s", pattern)
+            return
+        sample_size = args.limit or len(candidates)
+        sample_size = min(sample_size, len(candidates))
+        target_ids = random.sample(candidates, sample_size)
+
+    comp_pool = [e for e in comp_pool if e.get("target") in target_ids]
+    if not comp_pool:
+        logging.error("No target IDs matched the competition pool")
+        return
+
+    item_map: Dict[Any, Dict[str, Any]] = raw_map
+
+    def item_loader(item_id: int) -> Dict[str, Any]:
+        item = item_map.get(item_id) or item_map.get(str(item_id))
+        if not item:
+            return {}
+        return {
+            "image_input": item.get("image_input") or item.get("image") or [],
+            "text_input": item.get("text_input") or [],
+            "text": item.get("text", ""),
+        }
 
     # ------------------------------------------------------------------
     # 2) Extract saliency masks
     # ------------------------------------------------------------------
     # ``extract_cross_modal_masks`` expects each item to expose ``image`` and
-    # ``text`` fields.  The competition pool produced by the miner only stores
-    # metadata such as neighbours and anchors, therefore we re-load the raw
-    # pool (if necessary) and align it with the order of ``comp_pool`` so that
-    # the resulting mask has one entry per target item.
-    if not raw_map:
-        if raw_pool:
-            raw_map = {entry.get("id"): entry for entry in raw_pool}
-        elif os.path.isfile(args.pool_json):
+    # ``text`` fields.  ``raw_map`` is populated when building the competition
+    # pool, however when an external pool was provided ``raw_map`` may be empty.
+    # In that case we try to parse the raw item file if available and fall back
+    # to an empty mapping which results in dummy masks.
+    if not raw_map and args.pool_json and os.path.isfile(args.pool_json):
+        try:
             with open(args.pool_json, "r", encoding="utf-8") as f:
                 raw_data = json.load(f)
-            raw_map = {entry.get("id"): entry for entry in raw_data}
-        else:
+            if isinstance(raw_data, list):
+                raw_map = {entry.get("id"): entry for entry in raw_data}
+            elif isinstance(raw_data, dict):
+                raw_map = {
+                    entry.get("id", key): entry for key, entry in raw_data.items()
+                }
+        except Exception:
             raw_map = {}
+    elif not raw_map:
+        raw_map = {}
 
     victim_model = None
     if args.victim_ckpt:
