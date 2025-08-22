@@ -16,6 +16,8 @@ import os
 import pickle
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from numbers import Number
+import math
+import random
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
@@ -89,6 +91,7 @@ class SaliencyExtractor:
         top_p: float = 0.15,
         top_q: float = 0.15,
         vis_token_pos: Optional[Iterable[Iterable[int]]] = None,
+        model: Optional[Any] = None,
     ) -> Tuple[Dict[int, Dict[str, List[bool]]], Dict[str, Dict[str, float]]]:
         """Compute cross‑modal saliency masks for ``items``.
 
@@ -98,10 +101,12 @@ class SaliencyExtractor:
         1. Each item's image and text are converted into simple numerical
            representations.  Images are flattened to a list of floats and text
            is mapped to the ordinal value of each character.
-        2. If ``cross_attentions`` are provided by the caller they are used
-           directly. Otherwise a cross‑attention matrix is approximated by
-           taking the absolute outer product between the image and text
-           vectors.
+        2. If a ``model`` is supplied it is queried with
+           ``model(image, text, output_attentions=True)`` and the returned
+           ``cross_attentions`` are used.  When the model call fails or the
+           attention map does not match the feature dimensions, a warning is
+           emitted and a cross‑attention matrix is approximated by taking the
+           absolute outer product between the image and text vectors.
         3. Image saliency is the sum over the text dimension and vice versa for
            text saliency.
         4. The top‑``p`` (image) and top‑``q`` (text) proportions are converted
@@ -129,7 +134,7 @@ class SaliencyExtractor:
             n = len(scores)
             if n == 0:
                 return []
-            k = max(int(n * float(ratio)), 1)
+            k = max(int(math.ceil(n * float(ratio))), 1)
             k = min(k, n)
             indices = sorted(range(n), key=lambda i: scores[i], reverse=True)[:k]
             mask = [False] * n
@@ -144,11 +149,34 @@ class SaliencyExtractor:
         vis_pos_list = list(vis_token_pos) if vis_token_pos is not None else None
 
         for idx, item in enumerate(items):
-            image_vec = _to_float_list(item.get("image", []))
-            text_vec = _encode_text(item.get("text", ""))
+            image_vec = _to_float_list(item.get("image_feat", item.get("image", [])))
+            text_raw = item.get("text", "")
+            text_vec = _encode_text(text_raw)
 
-            cross_attn: Optional[List[List[float]]] = item.get("cross_attentions")
+            cross_attn: Optional[List[List[float]]] = None
+            warn_fallback = False
+            if model is not None:
+                try:
+                    output = model(item.get("image"), text_raw, output_attentions=True)
+                    cross_attn_tmp = getattr(output, "cross_attentions", None)
+                    if cross_attn_tmp is None and isinstance(output, dict):
+                        cross_attn_tmp = output.get("cross_attentions")
+                    if cross_attn_tmp is not None:
+                        cross_attn_tmp = [list(map(float, row)) for row in cross_attn_tmp]
+                        n_img = len(image_vec)
+                        n_txt = len(text_vec)
+                        if len(cross_attn_tmp) != n_img or any(len(row) != n_txt for row in cross_attn_tmp):
+                            warn_fallback = True
+                        else:
+                            cross_attn = cross_attn_tmp
+                    else:
+                        warn_fallback = True
+                except Exception:
+                    warn_fallback = True
+
             if cross_attn is None:
+                if warn_fallback:
+                    logging.warning("fallback to outer-product")
                 try:
                     cross_attn = [
                         [abs(i_val * t_val) for t_val in text_vec]
@@ -201,10 +229,12 @@ class SaliencyExtractor:
 
             img_mask = _topk_mask(img_scores, top_p)
             if not any(img_mask) and len(img_mask) > 0:
-                img_mask[0] = True
+                logging.warning("empty image mask; randomly selecting one token")
+                img_mask[random.randrange(len(img_mask))] = True
             txt_mask = _topk_mask(txt_scores, top_q)
             if not any(txt_mask) and len(txt_mask) > 0:
-                txt_mask[0] = True
+                logging.warning("empty text mask; randomly selecting one token")
+                txt_mask[random.randrange(len(txt_mask))] = True
 
             if pos_list is not None:
                 assert len(img_mask) == len(pos_list)
@@ -271,7 +301,7 @@ class SaliencyExtractor:
 # Convenience helper used by the poison pipeline
 # ---------------------------------------------------------------------------
 
-def get_masks(model: Any, state: Dict[str, Any], use_cache: bool) -> Dict[str, List[bool]]:
+def get_masks(model: Optional[Any], state: Dict[str, Any], use_cache: bool) -> Dict[str, List[bool]]:
     """Return cross-modal saliency masks for the given ``state``.
 
     The real project obtains saliency masks from a large model.  For the test
@@ -292,8 +322,8 @@ def get_masks(model: Any, state: Dict[str, Any], use_cache: bool) -> Dict[str, L
     extractor = SaliencyExtractor()
     img_feat = state.get("image") if isinstance(state, dict) else None
     txt_feat = state.get("text") if isinstance(state, dict) else None
-    items = [{"image": img_feat, "text": txt_feat}]
-    masks, _ = extractor.extract_cross_modal_masks(items)
+    items = [{"image": img_feat, "text": txt_feat, "image_feat": img_feat}]
+    masks, _ = extractor.extract_cross_modal_masks(items, model=model)
     mask = masks.get(0, {"image": [], "text": []})
 
     if isinstance(state, dict):

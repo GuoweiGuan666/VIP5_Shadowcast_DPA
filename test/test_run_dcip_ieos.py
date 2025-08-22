@@ -9,8 +9,22 @@ import importlib.util
 
 if importlib.util.find_spec("numpy") is None:  # pragma: no cover - numpy missing
     np = None
+    class _Array(list):
+        def tolist(self):
+            return list(self)
+
+        def ravel(self):
+            return _Array(self)
+
+        def __mul__(self, other):
+            return _Array([x * other for x in self])
+
+        __rmul__ = __mul__
+
     np_stub = types.SimpleNamespace()
     np_stub.random = types.SimpleNamespace(seed=lambda *args, **kwargs: None)
+    np_stub.zeros = lambda *args, **kwargs: _Array([0.0] * int(args[0]))
+    np_stub.asarray = lambda arr, dtype=float: _Array(list(arr))
     sys.modules["numpy"] = np_stub
 else:  # pragma: no cover - numpy present
     import numpy as np  # type: ignore
@@ -28,6 +42,7 @@ if "torch_stub" in locals():
     del sys.modules["torch"]
 
 
+@pytest.mark.skipif(np is None, reason="numpy is required for this test")
 def test_missing_features_abort(tmp_path, caplog, monkeypatch):
     data_root = tmp_path / "data"
     cache_dir = tmp_path / "cache"
@@ -44,6 +59,9 @@ def test_missing_features_abort(tmp_path, caplog, monkeypatch):
     with comp_path.open("w", encoding="utf-8") as f:
         json.dump([{"target": 2, "neighbors": [], "anchor": [], "keywords": []}], f)
 
+    pop_path = cache_dir / "pop.txt"
+    pop_path.write_text("Item: A1 (ID: 1)\n", encoding="utf-8")
+
     argv = [
         "run_dcip_ieos.py",
         "--dataset",
@@ -53,6 +71,8 @@ def test_missing_features_abort(tmp_path, caplog, monkeypatch):
         "--cache-dir",
         str(cache_dir),
         "--dry_run",
+        "--pop-path",
+        str(pop_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
     with caplog.at_level(logging.ERROR):
@@ -61,6 +81,7 @@ def test_missing_features_abort(tmp_path, caplog, monkeypatch):
     assert "Target 2 missing image and text data" in caplog.text
 
 
+@pytest.mark.skipif(np is None, reason="numpy is required for this test")
 def test_skip_missing_continues(tmp_path, caplog, monkeypatch):
     data_root = tmp_path / "data"
     cache_dir = tmp_path / "cache"
@@ -77,6 +98,9 @@ def test_skip_missing_continues(tmp_path, caplog, monkeypatch):
     with comp_path.open("w", encoding="utf-8") as f:
         json.dump([{"target": 2, "neighbors": [], "anchor": [], "keywords": []}], f)
 
+    pop_path = cache_dir / "pop.txt"
+    pop_path.write_text("Item: A1 (ID: 1)\n", encoding="utf-8")
+
     argv = [
         "run_dcip_ieos.py",
         "--dataset",
@@ -87,6 +111,8 @@ def test_skip_missing_continues(tmp_path, caplog, monkeypatch):
         str(cache_dir),
         "--dry_run",
         "--skip-missing",
+        "--pop-path",
+        str(pop_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
     with caplog.at_level(logging.WARNING):
