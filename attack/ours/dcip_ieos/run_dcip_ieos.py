@@ -282,7 +282,7 @@ def parse_args() -> argparse.Namespace:
         default=20,
         help=(
             "Minimum number of keywords required for a target; entries with fewer "
-            "keywords are skipped with a warning."
+            "keywords are skipped with a warning. Use 0 when the dataset lacks text."
         ),
     )
     parser.add_argument(
@@ -478,7 +478,8 @@ def main() -> None:
             comp_pool = json.load(f)
     comp_pool = [e for e in comp_pool if e.get("target") in target_ids]
 
-    filtered_pool = []
+    pre_filter_count = len(comp_pool)
+    filtered_pool: list[Dict[str, Any]] = []
     for entry in comp_pool:
         kw_field = entry.get("keywords", [])
         if isinstance(kw_field, dict):
@@ -496,10 +497,14 @@ def main() -> None:
         filtered_pool.append(entry)
     comp_pool = filtered_pool
 
+    removed_count = pre_filter_count - len(comp_pool)
 
     if not comp_pool:
         logging.error(
-            "No target IDs matched the competition pool after applying keyword filter"
+            "No target IDs matched the competition pool after applying keyword filter; "
+            "removed %d/%d targets. Hint: adjust --min-keywords (use 0 if the dataset lacks text).",
+            removed_count,
+            pre_filter_count,
         )
         return
     

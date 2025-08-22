@@ -139,6 +139,17 @@ Download preprocessed data and image features from this [Google Drive link](http
 - 参数设置：
   关键参数在 src/param.py 中设置，可根据实验需求修改。
 
+
+## Troubleshooting
+
+- **Empty competition pool after keyword filtering**: The
+  `attack/ours/dcip_ieos/run_dcip_ieos.py` script skips targets that do not
+  provide enough mined keywords. If the script exits with an error stating
+  that no target IDs matched after applying the keyword filter, all candidates
+  have been removed. Re-run with a lower `--min-keywords` value and set
+  `--min-keywords 0` when your dataset lacks text fields.
+
+
 ## Current Status and Future Work
 - 当前进展：
 
