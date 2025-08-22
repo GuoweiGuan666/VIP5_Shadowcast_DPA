@@ -217,6 +217,7 @@ class PoolMiner:
 def build_competition_pool(
     dataset: str,
     pop_path: str,
+    targets: Iterable[int],
     model: Any,
     *,
     cache_dir: Optional[str] = None,
@@ -237,6 +238,9 @@ def build_competition_pool(
     pop_path:
         Path to the text file containing the high popularity items.  The file
         is expected to list entries of the form ``Item: <ASIN> (ID: <idx>)``.
+    targets:
+        Iterable of low popularity item IDs to attack.  Neighbours are mined
+        for these targets from the high popularity set.
     model:
         A (possibly stubbed) VIP5 model to be passed to
         :func:`forward_inference`.
@@ -277,7 +281,7 @@ def build_competition_pool(
         raise ValueError(f"No items parsed from {pop_path!r}")
 
     # ------------------------------------------------------------------
-    # 2) Compute fused embeddings ``E(.)`` for all items in ``H``
+    # 2) Compute fused embeddings ``E(.)`` for items in ``H`` and targets ``T``
     if item_loader is None:
         # simple stub used in the tests – returns empty inputs
         def item_loader(_item_id: int) -> Dict[str, Any]:
@@ -287,7 +291,7 @@ def build_competition_pool(
                 "text": "",
             }
 
-    fused_embs: List[np.ndarray] = []
+    fused_high: List[np.ndarray] = []
     texts: List[str] = []
     raw_items: Dict[str, Dict[str, Any]] = {}
     for item_id in high_pop:
@@ -310,40 +314,78 @@ def build_competition_pool(
             img_emb = img_in.ravel()
             txt_emb = txt_in.ravel()
         fused = w_img * img_emb + w_txt * txt_emb
-        fused_embs.append(fused)
+        fused_high.append(fused)
         texts.append(text)
 
-    emb_matrix = np.vstack(fused_embs)
+    fused_tgts: List[np.ndarray] = []
+    targets = list(targets)
+    for item_id in targets:
+        item = item_loader(item_id) or {}
+        img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
+        txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
+        text = str(item.get("text", ""))
+
+        raw_items[str(item_id)] = {
+            "image_input": img_in.tolist(),
+            "text_input": txt_in.tolist(),
+            "text": text,
+        }
+
+        if model is not None:
+            outputs = forward_inference(model, img_in, txt_in)
+            img_emb = np.asarray(outputs.get("image_embedding", np.zeros(1))).astype(float).ravel()
+            txt_emb = np.asarray(outputs.get("text_embedding", np.zeros(1))).astype(float).ravel()
+        else:  # pragma: no cover - used only in CLI fallbacks
+            img_emb = img_in.ravel()
+            txt_emb = txt_in.ravel()
+        fused = w_img * img_emb + w_txt * txt_emb
+        fused_tgts.append(fused)
+
+    high_matrix = np.vstack(fused_high)
+    tgt_matrix = np.vstack(fused_tgts) if fused_tgts else np.zeros((0, high_matrix.shape[1]))
 
     # Optional dimensionality reduction
-    if pca_dim and PCA is not None and emb_matrix.shape[1] > pca_dim:
+    if pca_dim and PCA is not None and high_matrix.shape[1] > pca_dim:
         pca = PCA(n_components=pca_dim, random_state=0)
-        emb_matrix = pca.fit_transform(emb_matrix)
+        combined = np.vstack([high_matrix, tgt_matrix]) if tgt_matrix.size else high_matrix
+        combined = pca.fit_transform(combined)
+        high_matrix = combined[: len(high_pop)]
+        if tgt_matrix.size:
+            tgt_matrix = combined[len(high_pop) :]
 
     # ------------------------------------------------------------------
     # 3) Optional KMeans clustering
     clusters = None
     labels = np.zeros(len(high_pop), dtype=int)
+    tgt_labels = np.zeros(len(targets), dtype=int)
     if kmeans_k and KMeans is not None and len(high_pop) >= kmeans_k:
         try:
             km = KMeans(n_clusters=kmeans_k, n_init=10, random_state=0)
-            labels = km.fit_predict(emb_matrix)
+            labels = km.fit_predict(high_matrix)
             clusters = {"centroids": km.cluster_centers_.tolist()}
+            if tgt_matrix.size:
+                tgt_labels = km.predict(tgt_matrix)
         except Exception:
             clusters = None
             labels = np.zeros(len(high_pop), dtype=int)
+            tgt_labels = np.zeros(len(targets), dtype=int)
 
     # ------------------------------------------------------------------
     # 4) For each target compute nearest neighbours inside its cluster
     pool: Dict[str, Dict[str, Any]] = {}
     keywords: Dict[str, List[str]] = {}
-    for idx, item_id in enumerate(high_pop):
-        cluster_members = np.where(labels == labels[idx])[0]
-        cluster_members = [i for i in cluster_members if i != idx]
+    for idx, item_id in enumerate(targets):
+        if len(high_pop) == 0:
+            cluster_members = np.array([], dtype=int)
+        else:
+            if kmeans_k and KMeans is not None and clusters is not None:
+                cluster_members = np.where(labels == tgt_labels[idx])[0]
+            else:
+                cluster_members = np.arange(len(high_pop))
 
-        if cluster_members:
-            emb = emb_matrix[idx]
-            others = emb_matrix[cluster_members]
+        if cluster_members.size:
+            emb = tgt_matrix[idx]
+            others = high_matrix[cluster_members]
             norms = np.linalg.norm(others, axis=1) * (np.linalg.norm(emb) + 1e-12)
             sims = (others @ emb) / np.where(norms == 0, 1e-12, norms)
             order = np.argsort(-sims)[:c_size]
@@ -353,9 +395,9 @@ def build_competition_pool(
 
         comp_ids = [int(high_pop[i]) for i in neigh_indices]
         if neigh_indices:
-            anchor_vec = emb_matrix[neigh_indices].mean(axis=0)
+            anchor_vec = high_matrix[neigh_indices].mean(axis=0)
         else:
-            anchor_vec = emb_matrix[idx]
+            anchor_vec = tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
 
         pool[str(item_id)] = {
             "competitors": comp_ids,
@@ -452,7 +494,7 @@ def build_competition_pool(
         except Exception:  # pragma: no cover - corrupted pickle
             pass
 
-    for item_id in high_pop:
+    for item_id in list(high_pop) + targets:
         idx_str = str(item_id)
         asin = id2asin.get(idx_str, idx_str)
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
@@ -490,6 +532,7 @@ def build_competition_pool(
     data = {
         "dataset": dataset,
         "high_pop": high_pop,
+        "targets": list(targets),
         "clusters": clusters,
         "pool": pool,
         "keywords": keywords,

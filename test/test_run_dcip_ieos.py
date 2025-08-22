@@ -62,6 +62,9 @@ def test_missing_features_abort(tmp_path, caplog, monkeypatch):
     pop_path = cache_dir / "pop.txt"
     pop_path.write_text("Item: A1 (ID: 1)\n", encoding="utf-8")
 
+    tgt_path = cache_dir / "targets.txt"
+    tgt_path.write_text("ID: 2\n", encoding="utf-8")
+
     argv = [
         "run_dcip_ieos.py",
         "--dataset",
@@ -73,6 +76,8 @@ def test_missing_features_abort(tmp_path, caplog, monkeypatch):
         "--dry_run",
         "--pop-path",
         str(pop_path),
+        "--targets-path",
+        str(tgt_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
     with caplog.at_level(logging.ERROR):
@@ -101,6 +106,9 @@ def test_skip_missing_continues(tmp_path, caplog, monkeypatch):
     pop_path = cache_dir / "pop.txt"
     pop_path.write_text("Item: A1 (ID: 1)\n", encoding="utf-8")
 
+    tgt_path = cache_dir / "targets.txt"
+    tgt_path.write_text("ID: 2\n", encoding="utf-8")
+
     argv = [
         "run_dcip_ieos.py",
         "--dataset",
@@ -113,6 +121,8 @@ def test_skip_missing_continues(tmp_path, caplog, monkeypatch):
         "--skip-missing",
         "--pop-path",
         str(pop_path),
+        "--targets-path",
+        str(tgt_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
     with caplog.at_level(logging.WARNING):
@@ -135,6 +145,7 @@ def test_build_competition_pool_includes_raw_items(tmp_path):
     data = build_competition_pool(
         dataset="dset",
         pop_path=str(pop_path),
+        targets=[1],
         model=None,
         cache_dir=str(tmp_path),
         item_loader=loader,
@@ -181,6 +192,7 @@ def test_build_competition_pool_collects_item_metadata(tmp_path, monkeypatch):
     data = build_competition_pool(
         dataset=dataset,
         pop_path=str(pop_path),
+        targets=[1],
         model=None,
         cache_dir=str(tmp_path),
         item_loader=loader,
@@ -224,6 +236,9 @@ def test_run_dcip_ieos_uses_raw_items(tmp_path, monkeypatch):
         fake_build_competition_pool,
     )
 
+    tgt_path = cache_dir / "targets.txt"
+    tgt_path.write_text("ID: 1\n", encoding="utf-8")
+
     argv = [
         "run_dcip_ieos.py",
         "--dataset",
@@ -235,6 +250,8 @@ def test_run_dcip_ieos_uses_raw_items(tmp_path, monkeypatch):
         "--pop-path",
         str(pop_path),
         "--dry_run",
+        "--targets-path",
+        str(tgt_path),
     ]
     monkeypatch.setattr(sys, "argv", argv)
     main()

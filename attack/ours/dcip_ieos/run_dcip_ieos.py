@@ -342,73 +342,6 @@ def main() -> None:
 
     
     # ------------------------------------------------------------------
-    # 1) Mine or load the competition pool
-    # ------------------------------------------------------------------
-
-    os.makedirs(args.cache_dir, exist_ok=True)
-
-    comp_path = os.path.join(
-        args.cache_dir, f"competition_pool_{args.dataset}.json"
-    )
-    
-    raw_map: Dict[Any, Dict[str, Any]] = {}
-    items_meta: Dict[str, Any] = {}
-    if args.pool_json is None:
-        from attack.ours.dcip_ieos import pool_miner
-
-        logging.info(
-            "Building competition pool: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
-            args.pop_path,
-            args.k,
-            args.c,
-            args.w_img,
-            args.w_txt,
-            args.use_pca,
-            args.pca_dim,
-        )
-        data = pool_miner.build_competition_pool(
-            dataset=args.dataset,
-            pop_path=args.pop_path,
-            model=None,
-            cache_dir=args.cache_dir,
-            item_loader=None,
-            w_img=args.w_img,
-            w_txt=args.w_txt,
-            pca_dim=args.pca_dim if args.use_pca else None,
-            kmeans_k=args.k,
-            c_size=args.c,
-        )
-        pool_dict = data.get("pool", {})
-        keywords = data.get("keywords", {})
-        raw_items = data.get("raw_items", {})
-        raw_map = {
-            int(tid) if str(tid).isdigit() else tid: {
-                "image_input": info.get("image_input", []),
-                "text_input": info.get("text_input", []),
-                "text": info.get("text", ""),
-            }
-            for tid, info in raw_items.items()
-        }
-        comp_pool = [
-            {
-                "target": int(tid) if str(tid).isdigit() else tid,
-                "neighbors": info.get("competitors", []),
-                "anchor": info.get("anchor", []),
-                "keywords": keywords.get(str(tid), []),
-            }
-            for tid, info in pool_dict.items()
-        ]
-        items_meta = data.get("items", {})
-        with open(comp_path, "w", encoding="utf-8") as f:
-            json.dump(comp_pool, f, ensure_ascii=False, indent=2)
-    else:
-        comp_path = args.pool_json
-        if not os.path.isfile(comp_path):
-            logging.error("Competition pool file '%s' does not exist", comp_path)
-            return
-        with open(comp_path, "r", encoding="utf-8") as f:
-            comp_pool = json.load(f)
-    # ------------------------------------------------------------------
     # Select target IDs
     # ------------------------------------------------------------------
     def _parse_targets(path: str) -> list[int]:
@@ -450,7 +383,80 @@ def main() -> None:
         sample_size = min(sample_size, len(candidates))
         target_ids = random.sample(candidates, sample_size)
 
+    if not target_ids:
+        logging.error("No target IDs available")
+        return
+
+    # ------------------------------------------------------------------
+    # Mine or load the competition pool
+    # ------------------------------------------------------------------
+
+    os.makedirs(args.cache_dir, exist_ok=True)
+
+    comp_path = os.path.join(
+        args.cache_dir, f"competition_pool_{args.dataset}.json"
+    )
+    
+    raw_map: Dict[Any, Dict[str, Any]] = {}
+    items_meta: Dict[str, Any] = {}
+    if args.pool_json is None:
+        from attack.ours.dcip_ieos import pool_miner
+
+        logging.info(
+            "Building competition pool: pop_path=%s k=%d c=%d w_img=%.2f w_txt=%.2f use_pca=%s pca_dim=%s",
+            args.pop_path,
+            args.k,
+            args.c,
+            args.w_img,
+            args.w_txt,
+            args.use_pca,
+            args.pca_dim,
+        )
+        data = pool_miner.build_competition_pool(
+            dataset=args.dataset,
+            pop_path=args.pop_path,
+            targets=target_ids,
+            model=None,
+            cache_dir=args.cache_dir,
+            item_loader=None,
+            w_img=args.w_img,
+            w_txt=args.w_txt,
+            pca_dim=args.pca_dim if args.use_pca else None,
+            kmeans_k=args.k,
+            c_size=args.c,
+        )
+        pool_dict = data.get("pool", {})
+        keywords = data.get("keywords", {})
+        raw_items = data.get("raw_items", {})
+        raw_map = {
+            int(tid) if str(tid).isdigit() else tid: {
+                "image_input": info.get("image_input", []),
+                "text_input": info.get("text_input", []),
+                "text": info.get("text", ""),
+            }
+            for tid, info in raw_items.items()
+        }
+        comp_pool = [
+            {
+                "target": int(tid) if str(tid).isdigit() else tid,
+                "neighbors": info.get("competitors", []),
+                "anchor": info.get("anchor", []),
+                "keywords": keywords.get(str(tid), []),
+            }
+            for tid, info in pool_dict.items()
+        ]
+        items_meta = data.get("items", {})
+        with open(comp_path, "w", encoding="utf-8") as f:
+            json.dump(comp_pool, f, ensure_ascii=False, indent=2)
+    else:
+        comp_path = args.pool_json
+        if not os.path.isfile(comp_path):
+            logging.error("Competition pool file '%s' does not exist", comp_path)
+            return
+        with open(comp_path, "r", encoding="utf-8") as f:
+            comp_pool = json.load(f)
     comp_pool = [e for e in comp_pool if e.get("target") in target_ids]
+
     if not comp_pool:
         logging.error("No target IDs matched the competition pool")
         return
