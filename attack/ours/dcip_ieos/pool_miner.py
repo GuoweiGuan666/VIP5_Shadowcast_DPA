@@ -354,17 +354,29 @@ def build_competition_pool(
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
     raw_items: Dict[str, Dict[str, Any]] = {}
+    missing_text_ids: List[int] = []
     for item_id in high_pop:
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
+        asin = id2asin.get(str(item_id))
         text = str(item.get("text", "") or "")
+        if not text and asin:
+            text = meta_titles.get(asin, "") or review_texts.get(asin, "")
         if not text:
-            asin = id2asin.get(str(item_id))
-            if asin:
-                text = meta_titles.get(asin, "") or review_texts.get(asin, "")
-            if not text:
-                text = review_texts.get(str(item_id), "")
+            text = review_texts.get(str(item_id), "")
+        if not text:
+            missing_sources = []
+            if not (asin and meta_titles.get(asin)):
+                missing_sources.append("meta.json")
+            if not (review_texts.get(asin) or review_texts.get(str(item_id))):
+                missing_sources.append("review_splits.pkl")
+            logging.warning(
+                "No text found for item %s; missing sources: %s",
+                item_id,
+                ", ".join(missing_sources) or "none",
+            )
+            missing_text_ids.append(int(item_id))
 
         raw_items[str(item_id)] = {
             "image_input": img_in.tolist(),
@@ -389,13 +401,24 @@ def build_competition_pool(
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", np.zeros(1, dtype=float)), dtype=float)
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
+        asin = id2asin.get(str(item_id))
         text = str(item.get("text", "") or "")
+        if not text and asin:
+            text = meta_titles.get(asin, "") or review_texts.get(asin, "")
         if not text:
-            asin = id2asin.get(str(item_id))
-            if asin:
-                text = meta_titles.get(asin, "") or review_texts.get(asin, "")
-            if not text:
-                text = review_texts.get(str(item_id), "")
+            text = review_texts.get(str(item_id), "")
+        if not text:
+            missing_sources = []
+            if not (asin and meta_titles.get(asin)):
+                missing_sources.append("meta.json")
+            if not (review_texts.get(asin) or review_texts.get(str(item_id))):
+                missing_sources.append("review_splits.pkl")
+            logging.warning(
+                "No text found for item %s; missing sources: %s",
+                item_id,
+                ", ".join(missing_sources) or "none",
+            )
+            missing_text_ids.append(int(item_id))
 
         raw_items[str(item_id)] = {
             "image_input": img_in.tolist(),
@@ -552,6 +575,7 @@ def build_competition_pool(
         "pool": pool,
         "keywords": keywords,
         "raw_items": raw_items,
+        "missing_text_ids": sorted(set(missing_text_ids)),
         "items": items_meta,
         "params": {
             "w_img": w_img,
