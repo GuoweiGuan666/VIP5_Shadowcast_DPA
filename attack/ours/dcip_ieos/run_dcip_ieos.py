@@ -81,7 +81,10 @@ def parse_args() -> argparse.Namespace:
     """Return the command line arguments for the pipeline."""
 
     parser = argparse.ArgumentParser(
-        description="Run the light-weight DCIP-IEOS poisoning pipeline",
+        description=(
+            "Run the light-weight DCIP-IEOS poisoning pipeline. Targets with "
+            "too few keywords are skipped with a warning."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -274,6 +277,15 @@ def parse_args() -> argparse.Namespace:
         help="Skip targets missing image or text data instead of raising an error.",
     )
     parser.add_argument(
+        "--min-keywords",
+        type=int,
+        default=20,
+        help=(
+            "Minimum number of keywords required for a target; entries with fewer "
+            "keywords are skipped with a warning."
+        ),
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=None,
@@ -457,8 +469,25 @@ def main() -> None:
             comp_pool = json.load(f)
     comp_pool = [e for e in comp_pool if e.get("target") in target_ids]
 
+    filtered_pool = []
+    for entry in comp_pool:
+        kw_len = len(entry.get("keywords", []))
+        if kw_len < args.min_keywords:
+            logging.warning(
+                "Skipping target %s: only %d keywords (<%d)",
+                entry.get("target"),
+                kw_len,
+                args.min_keywords,
+            )
+            continue
+        filtered_pool.append(entry)
+    comp_pool = filtered_pool
+
+
     if not comp_pool:
-        logging.error("No target IDs matched the competition pool")
+        logging.error(
+            "No target IDs matched the competition pool after applying keyword filter"
+        )
         return
     
     # Summarise the competition pool before proceeding
@@ -511,12 +540,14 @@ def main() -> None:
             )
             logging.error(msg)
             raise AssertionError(msg)
-        if len(kw) < 20:
-            msg = (
-                f"Target {tgt} has only {len(kw)} keywords (<20)"
+        if len(kw) < args.min_keywords:
+            logging.warning(
+                "Target %s has only %d keywords (<%d); skipping",
+                tgt,
+                len(kw),
+                args.min_keywords,
             )
-            logging.error(msg)
-            raise AssertionError(msg)
+            continue
         if image_dim is not None:
             img_feat = items_meta.get(str(tgt), {}).get("image_feat")
             if img_feat and len(img_feat) != image_dim:
