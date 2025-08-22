@@ -356,15 +356,24 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
             )
             pool_dict = data.get("pool", {})
             keywords = data.get("keywords", {})
-            comp_pool = [
-                {
-                    "target": int(tid) if str(tid).isdigit() else tid,
-                    "neighbors": info.get("competitors", []),
-                    "anchor": info.get("anchor", []),
-                    "keywords": keywords.get(str(tid), []),
-                }
-                for tid, info in pool_dict.items()
-            ]
+            comp_pool = []
+            for tid, info in pool_dict.items():
+                kw_entry = keywords.get(str(tid), {})
+                if isinstance(kw_entry, dict):
+                    kw_tokens = kw_entry.get("tokens", [])
+                    synthetic = bool(kw_entry.get("synthetic", False))
+                else:
+                    kw_tokens = kw_entry
+                    synthetic = False
+                comp_pool.append(
+                    {
+                        "target": int(tid) if str(tid).isdigit() else tid,
+                        "neighbors": info.get("competitors", []),
+                        "anchor": info.get("anchor", []),
+                        "keywords": kw_tokens,
+                        "synthetic": synthetic,
+                    }
+                )
             with open(comp_path, "w", encoding="utf-8") as f:
                 json.dump(comp_pool, f, ensure_ascii=False, indent=2)
         elif os.path.isfile(raw_pool_path):
@@ -502,7 +511,11 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
 
         anchor = target_info.get("anchor", [])
         target_vec = target_info.get("target_feat", [0.0] * len(anchor))
-        keywords = target_info.get("keywords", [])
+        kw_field = target_info.get("keywords", [])
+        if isinstance(kw_field, dict):
+            keywords = kw_field.get("tokens", [])
+        else:
+            keywords = kw_field
         text = " ".join(keywords)
         curr_img = list(anchor)
         curr_text = text
@@ -631,7 +644,19 @@ def run_pipeline(args: Any) -> Dict[str, Any]:
     # Copy keywords from the competition pool.  When an original mapping
     # exists in ``split_dir`` it is merged with the freshly mined keywords so
     # that existing entries are preserved.
-    keywords_map = {str(e.get("target")): e.get("keywords", []) for e in competition_pool}
+    keywords_map: Dict[str, Any] = {}
+    for e in competition_pool:
+        kw_field = e.get("keywords", [])
+        if isinstance(kw_field, dict):
+            tokens = kw_field.get("tokens", [])
+            synthetic = bool(kw_field.get("synthetic", False))
+        else:
+            tokens = kw_field
+            synthetic = bool(e.get("synthetic", False))
+        keywords_map[str(e.get("target"))] = {
+            "tokens": tokens,
+            "synthetic": synthetic,
+        }
     orig_kw_path = os.path.join(split_dir, "keywords.pkl")
     if os.path.isfile(orig_kw_path):
         try:

@@ -30,6 +30,7 @@ class TestKeywordSerialisation(unittest.TestCase):
                     "neighbors": [1, 2],
                     "anchor": [0.0, 0.1],
                     "keywords": ["hello", "world"],
+                    "synthetic": False,
                 }
             ]
             comp_path = os.path.join(cache_dir, f"competition_pool_{dataset}.json")
@@ -50,7 +51,8 @@ class TestKeywordSerialisation(unittest.TestCase):
             kw_path = info["keywords_path"]
             self.assertTrue(os.path.isfile(kw_path))
             kw_map = pickle.load(open(kw_path, "rb"))
-            self.assertEqual(kw_map.get("t1"), ["hello", "world"])
+            self.assertEqual(kw_map.get("t1", {}).get("tokens"), ["hello", "world"])
+            self.assertFalse(kw_map.get("t1", {}).get("synthetic", True))
 
             self.assertTrue(
                 checks.poisoned_files_exist({k: v for k, v in info.items() if isinstance(v, str)})

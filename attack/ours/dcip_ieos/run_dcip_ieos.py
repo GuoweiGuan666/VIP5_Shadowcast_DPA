@@ -448,15 +448,24 @@ def main() -> None:
             }
             for tid, info in raw_items.items()
         }
-        comp_pool = [
-            {
-                "target": int(tid) if str(tid).isdigit() else tid,
-                "neighbors": info.get("competitors", []),
-                "anchor": info.get("anchor", []),
-                "keywords": keywords.get(str(tid), []),
-            }
-            for tid, info in pool_dict.items()
-        ]
+        comp_pool = []
+        for tid, info in pool_dict.items():
+            kw_entry = keywords.get(str(tid), {})
+            if isinstance(kw_entry, dict):
+                kw_tokens = kw_entry.get("tokens", [])
+                synthetic = bool(kw_entry.get("synthetic", False))
+            else:
+                kw_tokens = kw_entry
+                synthetic = False
+            comp_pool.append(
+                {
+                    "target": int(tid) if str(tid).isdigit() else tid,
+                    "neighbors": info.get("competitors", []),
+                    "anchor": info.get("anchor", []),
+                    "keywords": kw_tokens,
+                    "synthetic": synthetic,
+                }
+            )
         items_meta = data.get("items", {})
         with open(comp_path, "w", encoding="utf-8") as f:
             json.dump(comp_pool, f, ensure_ascii=False, indent=2)
@@ -471,7 +480,11 @@ def main() -> None:
 
     filtered_pool = []
     for entry in comp_pool:
-        kw_len = len(entry.get("keywords", []))
+        kw_field = entry.get("keywords", [])
+        if isinstance(kw_field, dict):
+            kw_len = len(kw_field.get("tokens", []))
+        else:
+            kw_len = len(kw_field)
         if kw_len < args.min_keywords:
             logging.warning(
                 "Skipping target %s: only %d keywords (<%d)",
@@ -500,7 +513,8 @@ def main() -> None:
     num_targets = len({e.get("target") for e in comp_pool})
     first = comp_pool[0]
     anchor_dim = len(first.get("anchor", []))
-    keyword_cnt = len(first.get("keywords", []))
+    kw_field = first.get("keywords", [])
+    keyword_cnt = len(kw_field.get("tokens", [])) if isinstance(kw_field, dict) else len(kw_field)
     logging.info(
         "Pool summary: size=%d targets=%d neighbours=%d anchor_dim=%d keywords=%d",
         pool_size,

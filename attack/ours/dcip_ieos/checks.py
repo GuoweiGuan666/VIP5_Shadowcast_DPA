@@ -213,7 +213,13 @@ def verify_poison_statistics(
             raise AssertionError(f"PSNR below threshold for user {user_id}")
 
         # Text replacement rate
-        orig_text = " ".join(tgt.get("keywords", []))
+        kw_field = tgt.get("keywords", [])
+        if isinstance(kw_field, dict):
+            kw_tokens = kw_field.get("tokens", [])
+        else:
+            kw_tokens = kw_field
+        orig_text = " ".join(kw_tokens)
+        poisoned_text = id_to_text.get(user_id, "")
         poisoned_text = id_to_text.get(user_id, "")
         if orig_text:
             orig_tokens = orig_text.split()

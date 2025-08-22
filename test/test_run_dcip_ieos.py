@@ -225,7 +225,7 @@ def test_run_dcip_ieos_uses_raw_items(tmp_path, monkeypatch):
     def fake_build_competition_pool(**kwargs):
         return {
             "pool": {"1": {"competitors": [], "anchor": []}},
-            "keywords": {"1": []},
+            "keywords": {"1": {"tokens": [], "synthetic": False}},
             "raw_items": {
                 "1": {
                     "image_input": [0.1, 0.2],

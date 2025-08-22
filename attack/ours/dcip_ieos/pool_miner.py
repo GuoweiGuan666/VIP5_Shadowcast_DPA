@@ -517,6 +517,28 @@ def build_competition_pool(
 
 
     # ------------------------------------------------------------------
+    # 4a) Fill in synthetic keywords for targets lacking mined ones
+    synthetic_flags: Dict[str, bool] = {}
+    for item_id in targets:
+        key = str(item_id)
+        kw_list = keywords.get(key, [])
+        if not kw_list:
+            text_src = raw_items.get(key, {}).get("text", "")
+            tokens = re.findall(r"\w+", text_src)
+            if not tokens:
+                tokens = ["item", "product"]
+            keywords[key] = tokens[:keyword_top]
+            synthetic_flags[key] = True
+        else:
+            synthetic_flags[key] = False
+
+    keywords = {
+        key: {"tokens": keywords.get(key, []), "synthetic": synthetic_flags.get(key, False)}
+        for key in keywords.keys()
+    }
+
+
+    # ------------------------------------------------------------------
     # 4b) Gather per-item metadata (title and image features)
     items_meta: Dict[str, Dict[str, Any]] = {}
     img_dict_path = os.path.join(dataset_dir, "item2img_dict.pkl")
