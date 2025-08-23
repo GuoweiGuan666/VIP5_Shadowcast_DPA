@@ -210,11 +210,6 @@ def parse_args() -> argparse.Namespace:
         help="Allow image features specified as file paths and decode them on the fly.",
     )
     parser.add_argument(
-        "--allow-missing-text",
-        action="store_true",
-        help="Substitute missing text fields with a placeholder instead of aborting.",
-    )
-    parser.add_argument(
         "--min-img-tokens",
         type=int,
         default=None,
