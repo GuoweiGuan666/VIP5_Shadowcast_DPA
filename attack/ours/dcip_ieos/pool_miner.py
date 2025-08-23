@@ -505,6 +505,15 @@ def build_competition_pool(
             return arr.copy(), False
         if isinstance(vec, (list, tuple, np.ndarray)):
             arr = np.asarray(vec, dtype=float).ravel()
+            if arr.size <= 1:
+                logging.warning(
+                    "[ImageFeat] insufficient vector length %d for %s; using zeros",
+                    arr.size,
+                    key,
+                )
+                if img_feat_dim == 0:
+                    img_feat_dim = 512
+                return np.zeros((img_feat_dim,), dtype=float), True
             if img_feat_dim == 0:
                 img_feat_dim = len(arr)
             return arr.copy(), False
