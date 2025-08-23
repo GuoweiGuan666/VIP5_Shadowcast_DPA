@@ -51,10 +51,31 @@ try:  # Optional heavy dependencies
 except Exception:  # pragma: no cover - fallback if sklearn is missing
     KMeans = PCA = TfidfVectorizer = None
 
+try:  # torch is optional at runtime
+    import torch
+except Exception:  # pragma: no cover - torch may be absent
+    torch = None
+
+
 from attack.baselines.shadowcast.shadowcast_embedding import forward_inference
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
+
+def _to_jsonable(obj: Any) -> Any:
+    """Recursively convert ``obj`` into a JSON serialisable structure."""
+
+    if isinstance(obj, (np.floating, np.integer)):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if torch is not None and isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist()
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
 
 
 class PoolMiner:
@@ -535,13 +556,7 @@ def build_competition_pool(
             else:
                 raise KeyError(f"text not found for item {item_id}")
 
-        raw_items[asin] = {
-            "image_input": img_in.tolist(),
-            "image": img_in.tolist(),
-            "text_input": txt_in.tolist(),
-            "text": text,
-            "category_ids": item.get("category_ids"),
-        }
+        raw_items[asin] = {"image": img_in.tolist(), "text": text}
 
         if model is not None:
             outputs = forward_inference(model, img_in, txt_in)
@@ -593,13 +608,7 @@ def build_competition_pool(
             else:
                 raise KeyError(f"text not found for item {item_id}")
 
-        raw_items[asin] = {
-            "image_input": img_in.tolist(),
-            "image": img_in.tolist(),
-            "text_input": txt_in.tolist(),
-            "text": text,
-            "category_ids": item.get("category_ids"),
-        }
+        raw_items[asin] = {"image": img_in.tolist(), "text": text}
 
         if model is not None:
             outputs = forward_inference(model, img_in, txt_in)
@@ -794,7 +803,7 @@ def build_competition_pool(
     }
 
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(_to_jsonable(data), f, ensure_ascii=False, indent=2)
 
     return data
 

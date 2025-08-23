@@ -158,7 +158,7 @@ def test_build_competition_pool_includes_raw_items(tmp_path):
     )
     assert "raw_items" in data
     assert data["raw_items"]["1"]["text"] == "hi"
-    assert data["raw_items"]["1"]["image_input"] == [1.0, 2.0]
+    assert data["raw_items"]["1"]["image"] == [1.0, 2.0]
 
 
 
@@ -227,11 +227,7 @@ def test_run_dcip_ieos_uses_raw_items(tmp_path, monkeypatch):
             "pool": {"1": {"competitors": [], "anchor": []}},
             "keywords": {"1": {"tokens": [], "synthetic": False}},
             "raw_items": {
-                "1": {
-                    "image_input": [0.1, 0.2],
-                    "text_input": [0.3],
-                    "text": "hi",
-                }
+                "1": {"image": [0.1, 0.2], "text": "hi"}
             },
         }
 

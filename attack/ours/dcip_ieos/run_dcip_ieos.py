@@ -527,12 +527,7 @@ def main() -> None:
         pool_dict = data.get("pool", {})
         raw_items = data.get("raw_items", {})
         raw_map = {
-            tid: {
-                "image_input": info.get("image_input", []),
-                "text_input": info.get("text_input", []),
-                "text": info.get("text", ""),
-                "category_ids": info.get("category_ids"),
-            }
+            tid: {"image": info.get("image", []), "text": info.get("text", "")}
             for tid, info in raw_items.items()
         }
         comp_pool = []
@@ -671,10 +666,9 @@ def main() -> None:
         if not item:
             return {}
         return {
-            "image_input": item.get("image_input") or item.get("image") or [],
-            "text_input": item.get("text_input") or [],
+            "image_input": item.get("image") or [],
+            "text_input": [],
             "text": item.get("text", ""),
-            "category_ids": item.get("category_ids"),
         }
 
     # ------------------------------------------------------------------
@@ -711,11 +705,7 @@ def main() -> None:
     mask_pool = []
     for entry in comp_pool:
         item = raw_map.get(entry.get("target"), {})
-        pool_item = {
-            "image": item.get("image") or item.get("image_input") or [],
-            "text": item.get("text", ""),
-            "category_ids": item.get("category_ids"),
-        }
+        pool_item = {"image": item.get("image", []), "text": item.get("text", "")}
         mask_pool.append(pool_item)
 
     filtered_comp_pool = []
