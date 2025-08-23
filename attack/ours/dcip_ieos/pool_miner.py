@@ -57,6 +57,71 @@ except Exception:  # pragma: no cover - torch may be absent
     torch = None
 
 
+try:  # pragma: no cover - PIL may be absent
+    from PIL import Image
+except Exception:  # pragma: no cover - optional dependency
+    Image = None  # type: ignore
+
+
+def load_image_feature_any(
+    asin: Any,
+    img_feat_entry: Any,
+    data_root: str,
+    dataset: str,
+    victim_model: Any,
+    preprocess: Optional[Callable[[Any], Any]] = None,
+):
+    """Return image features regardless of input form.
+
+    The real project stores image features either as pre-computed vectors or as
+    relative paths to image files.  The light-weight implementation mimics this
+    behaviour by supporting both options.  When a path is supplied the function
+    attempts to load the image and, if available, queries the ``victim_model``
+    for raw features.  Falling back to a flattened pixel representation keeps
+    the helper usable even when heavy dependencies such as ``torch`` or
+    ``PIL`` are missing.
+    """
+
+    src = "vector"
+    if isinstance(img_feat_entry, str):
+        abs_path = (
+            img_feat_entry
+            if os.path.isabs(img_feat_entry)
+            else os.path.join(data_root, dataset, img_feat_entry)
+        )
+        if not os.path.isfile(abs_path):  # pragma: no cover - sanity check
+            raise FileNotFoundError(f"Image path not found: {abs_path}")
+        if Image is None:  # pragma: no cover - PIL missing
+            raise RuntimeError("PIL is required to load image paths")
+        img = Image.open(abs_path).convert("RGB")
+        if preprocess is not None:
+            pixel = preprocess(img)
+        else:
+            pixel = np.asarray(img, dtype="float32") / 255.0
+        if victim_model is not None and hasattr(victim_model, "extract_raw_image_feats"):
+            feats = victim_model.extract_raw_image_feats(pixel)  # type: ignore[attr-defined]
+            if torch is not None and isinstance(feats, torch.Tensor):
+                feats_np = feats.detach().cpu().numpy()
+            else:
+                feats_np = np.asarray(feats, dtype="float32")
+        else:
+            feats_np = np.asarray(pixel, dtype="float32").reshape(-1)
+        src = "path->encoder"
+    else:
+        feats_np = np.asarray(img_feat_entry, dtype="float32")
+
+    assert np.isfinite(feats_np).all(), "Non-finite image features"
+    assert feats_np.ndim in (1, 2), f"Unexpected img feats ndim={feats_np.ndim}"
+    logging.debug(
+        "Loaded image feats: asin=%s shape=%s from %s",
+        asin,
+        feats_np.shape,
+        src,
+    )
+    return feats_np, src
+
+
+
 from attack.baselines.shadowcast.shadowcast_embedding import forward_inference
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -244,6 +309,89 @@ class PoolMiner:
 
         with open(self.out_path, "w", encoding="utf-8") as f:
             json.dump(validated, f, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Anchor computation using victim model
+# ---------------------------------------------------------------------------
+def compute_anchor_with_victim(
+    model: Any,
+    tokenizer: Any,
+    neighbor_items: Iterable[Dict[str, Any]],
+    *,
+    w_img: float = 0.6,
+    w_txt: float = 0.4,
+) -> np.ndarray:
+    """Return an anchor embedding based on visual/textual tokens.
+
+    ``neighbor_items`` is an iterable of dictionaries that contain at least
+    ``image`` (or ``image_feat``) and ``text`` entries.  The helper averages the
+    image and text token representations separately before fusing them.  The
+    function is intentionally tolerant and falls back to simple numeric
+    encodings when the heavy victim model or tokenizer are unavailable.
+    """
+
+    from .saliency_extractor import project_visual_tokens  # Local import
+
+    img_vecs: List[Any] = []
+    txt_vecs: List[Any] = []
+
+    for it in neighbor_items:
+        feats = it.get("image") or it.get("image_feat")
+        if feats is not None:
+            vis_tokens = project_visual_tokens(model, feats)
+            if torch is not None and isinstance(vis_tokens, torch.Tensor):
+                img_vecs.append(vis_tokens.mean(dim=1))
+            else:
+                arr = np.asarray(vis_tokens)
+                img_vecs.append(arr.mean(axis=1) if arr.ndim == 3 else arr)
+
+        text = it.get("text", "")
+        if (
+            tokenizer is not None
+            and hasattr(model, "encoder")
+            and hasattr(model.encoder, "embed_tokens")
+            and torch is not None
+        ):
+            try:
+                batch = tokenizer(text, return_tensors="pt")
+                input_ids = batch.get("input_ids")
+                if isinstance(input_ids, torch.Tensor):
+                    with torch.no_grad():
+                        t_tokens = model.encoder.embed_tokens(input_ids.to(model.device))  # type: ignore[attr-defined]
+                    txt_vecs.append(t_tokens.mean(dim=1))
+                    continue
+            except Exception:
+                pass
+        arr = np.asarray([float(ord(c)) for c in str(text)], dtype="float32")
+        txt_vecs.append(arr.mean() if arr.ndim == 1 else arr.mean(axis=0))
+
+    if not img_vecs and not txt_vecs:
+        return np.zeros(0, dtype="float32")
+
+    if torch is not None and any(isinstance(v, torch.Tensor) for v in img_vecs + txt_vecs):
+        img = torch.stack(
+            [v if isinstance(v, torch.Tensor) else torch.as_tensor(v) for v in img_vecs],
+            dim=0,
+        ).mean(dim=0)
+        txt = torch.stack(
+            [v if isinstance(v, torch.Tensor) else torch.as_tensor(v) for v in txt_vecs],
+            dim=0,
+        ).mean(dim=0)
+        anchor = (w_img * img + w_txt * txt).squeeze(0)
+        anchor_np = anchor.detach().cpu().numpy()
+    else:
+        img = np.mean(np.stack([np.asarray(v) for v in img_vecs], axis=0), axis=0)
+        txt = np.mean(np.stack([np.asarray(v) for v in txt_vecs], axis=0), axis=0)
+        anchor_np = w_img * img + w_txt * txt
+        anchor_np = np.asarray(anchor_np).reshape(-1)
+
+    d_model = getattr(model, "d_model", lambda: anchor_np.shape[0])()
+    assert anchor_np.ndim == 1 and anchor_np.shape[0] == d_model, (
+        f"Bad anchor shape: {anchor_np.shape}; expected ({d_model},)"
+    )
+    return anchor_np
+
 
 
 # ----------------------------------------------------------------------

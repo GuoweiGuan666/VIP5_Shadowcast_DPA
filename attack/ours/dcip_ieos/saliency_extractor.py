@@ -19,6 +19,13 @@ from numbers import Number
 import math
 import random
 
+try:  # optional heavy deps
+    import numpy as np
+    import torch
+except Exception:  # pragma: no cover - keep lightweight
+    np = None  # type: ignore
+    torch = None  # type: ignore
+
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 
 
@@ -201,7 +208,7 @@ class SaliencyExtractor:
 
             if cross_attn is None:
                 if warn_fallback:
-                    logging.warning("WARNING: fallback to outer-product")
+                    logging.warning("FALLBACK: outer-product (fallback to outer-product)")
                     fallback_count += 1
                 try:
                     cross_attn = [
@@ -210,6 +217,8 @@ class SaliencyExtractor:
                     ]
                 except Exception:
                     cross_attn = None
+            else:
+                logging.info("Using REAL cross-attn for item %d", idx)
 
             pos_list: Optional[List[int]] = None
             if vis_pos_list is not None and idx < len(vis_pos_list):
@@ -332,6 +341,124 @@ class SaliencyExtractor:
         )
 
         return masks, stats
+    
+
+# ---------------------------------------------------------------------------
+# Helpers mimicking the heavier research implementation
+# ---------------------------------------------------------------------------
+def project_visual_tokens(victim_model: Any, feats_np: Any) -> Any:
+    """Project raw visual features to model's ``d_model`` tokens.
+
+    ``feats_np`` may either be a 1-D array or a 2-D array of shape
+    ``[L_img, D_in]``.  When the heavy ``victim_model`` is unavailable the input
+    is returned unchanged which keeps the helper functional in the light-weight
+    tests.
+    """
+
+    if torch is None or victim_model is None:
+        return feats_np
+    arr = np.asarray(feats_np, dtype="float32") if np is not None else feats_np
+    if arr.ndim == 1:
+        arr = arr[None, :]
+    tensor = torch.as_tensor(arr, dtype=torch.float32, device=getattr(victim_model, "device", "cpu"))
+    try:
+        with torch.no_grad():
+            vis_embeds = victim_model.encoder.visual_embedding(tensor[None, ...])  # type: ignore[attr-defined]
+        vis_tokens = vis_embeds.view(1, -1, vis_embeds.shape[-1])
+    except Exception:  # pragma: no cover - fallback when model lacks method
+        vis_tokens = tensor.unsqueeze(0)
+    assert vis_tokens.shape[1] >= 1, f"n_vis_tokens too small: {vis_tokens.shape}"
+    return vis_tokens
+
+
+def assemble_single_item_batch(tokenizer: Any, text_str: str, vis_feats_np: Any, device: str) -> Dict[str, Any]:
+    """Assemble inputs mirroring the training template."""
+
+    if tokenizer is not None and torch is not None:
+        source_text = f"{text_str} <extra_id_0>"
+        enc = tokenizer(source_text, return_tensors="pt")
+        input_ids = enc["input_ids"].to(device)
+    else:
+        ids = [0] * (len(str(text_str)) + 1)
+        input_ids = torch.tensor([ids], device=device) if torch is not None else [[0] * len(ids)]
+    if torch is not None:
+        category_ids = (input_ids == getattr(tokenizer, "convert_tokens_to_ids", lambda x: 0)("<extra_id_0>"))
+        category_ids = category_ids.long()
+        vis_feats = torch.as_tensor(vis_feats_np, dtype=torch.float32, device=device)
+        if vis_feats.ndim == 1:
+            vis_feats = vis_feats.unsqueeze(0)
+        return {"input_ids": input_ids, "category_ids": category_ids, "vis_feats": vis_feats.unsqueeze(0)}
+    return {"input_ids": input_ids, "category_ids": [], "vis_feats": [vis_feats_np]}
+
+
+def _aggregate_cross_attn(cross_attn: Any) -> Optional[Any]:
+    if cross_attn is None or torch is None:
+        return None
+    try:
+        stacked = torch.stack([torch.as_tensor(a) for a in cross_attn], dim=0)  # L,B,H,T_dec,T_enc
+        agg = stacked.mean(dim=0)  # B,H,T_dec,T_enc
+        agg = agg.mean(dim=1)[0]  # T_dec,T_enc
+        return agg
+    except Exception:
+        return None
+
+
+def _topk_mask(scores: Any, ratio: float) -> List[bool]:
+    arr = scores.detach().cpu().numpy() if torch is not None and isinstance(scores, torch.Tensor) else np.asarray(scores) if np is not None else scores
+    n = len(arr)
+    if n == 0:
+        return []
+    k = max(int(math.ceil(n * float(ratio))), 1)
+    idx = np.argsort(-arr)[:k] if np is not None else sorted(range(n), key=lambda i: arr[i], reverse=True)[:k]
+    mask = [False] * n
+    for i in idx:
+        mask[int(i)] = True
+    return mask
+
+
+def get_masks_from_cross_attn(
+    victim_model: Any,
+    tokenizer: Any,
+    text_str: str,
+    vis_feats_np: Any,
+    top_p: float = 0.15,
+    top_q: float = 0.10,
+) -> Dict[str, List[bool]]:
+    """Return image/text masks derived from decoder cross-attention."""
+
+    device = getattr(victim_model, "device", "cpu")
+    try:
+        batch = assemble_single_item_batch(tokenizer, text_str, vis_feats_np, device)
+        labels = batch["input_ids"].clone() if torch is not None and isinstance(batch["input_ids"], torch.Tensor) else None
+        outputs = victim_model(
+            input_ids=batch.get("input_ids"),
+            category_ids=batch.get("category_ids"),
+            vis_feats=batch.get("vis_feats"),
+            labels=labels,
+            output_attentions=True,
+            use_cache=False,
+        )
+        cross = getattr(outputs, "cross_attentions", None)
+        if cross is None and isinstance(outputs, dict):
+            cross = outputs.get("cross_attentions")
+        agg = _aggregate_cross_attn(cross)
+        if agg is not None:
+            img_scores = agg.sum(dim=0) if torch is not None else agg.sum(axis=0)
+            txt_scores = agg.sum(dim=1) if torch is not None else agg.sum(axis=1)
+            img_mask = _topk_mask(img_scores, top_p)
+            txt_mask = _topk_mask(txt_scores, top_q)
+            logging.info("Using REAL cross-attn")
+            return {"image": img_mask, "text": txt_mask}
+    except Exception:
+        pass
+
+    logging.warning("FALLBACK: outer-product")
+    extractor = SaliencyExtractor()
+    items = [{"image": vis_feats_np, "text": text_str, "image_feat": vis_feats_np}]
+    masks, _ = extractor.extract_cross_modal_masks(items, top_p=top_p, top_q=top_q)
+    return masks.get(0, {"image": [], "text": []})
+
+
 
 
 # ---------------------------------------------------------------------------

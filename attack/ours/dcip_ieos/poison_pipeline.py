@@ -256,6 +256,76 @@ def process_target(
 
 
 
+def alternating_rounds_per_target(
+    model: Any,
+    state: Dict[str, Any],
+    img_perturber: ImagePerturber,
+    txt_perturber: TextPerturber,
+    cfg: Any,
+) -> Dict[str, Any]:
+    """Iteratively perturb ``state`` with mask recomputation.
+
+    The helper mirrors the behaviour of the research code where image and text
+    perturbations are applied in alternating rounds and the saliency masks may be
+    recomputed after the image step.  ``cfg`` is expected to expose the
+    attributes ``inner_rounds``, ``align_tau``, ``img_eps_max``,
+    ``txt_ratio_max`` and ``recalc_after_image``.  Missing attributes fall back
+    to sensible defaults.
+    """
+
+    rounds = int(getattr(cfg, "inner_rounds", 1))
+    state.setdefault("psnr_curve", [])
+    state.setdefault("gain_curve", [])
+    state.setdefault("img_budget", 0.0)
+    state.setdefault("txt_budget", 0.0)
+
+    for r in range(rounds):
+        masks = state.get("masks", {})
+        img_mask = masks.get("image", [])
+        txt_mask = masks.get("text", [])
+
+        img_out, psnr, eps, _ = img_perturber.perturb(
+            state.get("image", []), mask=img_mask, target_feat=state.get("anchor", [])
+        )
+        state["image"] = img_out
+        state["psnr_curve"].append(psnr)
+        state["img_budget"] += eps
+
+        if getattr(cfg, "recalc_after_image", False):
+            from .saliency_extractor import get_masks
+
+            state["masks"] = get_masks(model, state, use_cache=False)
+            img_mask = state["masks"].get("image", [])
+            txt_mask = state["masks"].get("text", [])
+
+        txt_out, ratio, _ = txt_perturber.perturb(
+            state.get("text", ""), mask=txt_mask, keywords=state.get("keywords", [])
+        )
+        state["text"] = txt_out
+        state["txt_budget"] += ratio
+
+        gain = compute_align_gain(
+            model,
+            {"prev": state.get("anchor", []), "curr": state.get("anchor", [])},
+            state.get("anchor", []),
+        )
+        state["gain_curve"].append(gain)
+
+        if (
+            gain < getattr(cfg, "align_tau", 0.0)
+            or state["img_budget"] > getattr(cfg, "img_eps_max", float("inf"))
+            or state["txt_budget"] > getattr(cfg, "txt_ratio_max", float("inf"))
+        ):
+            state["stop_reason"] = (
+                f"round={r}, gain={gain:.4g}, psnr={psnr:.2f}, img_budget={state['img_budget']:.3f},"
+                f" txt_budget={state['txt_budget']:.3f}"
+            )
+            break
+
+    assert len(state["gain_curve"]) >= 1, "No alternating rounds executed"
+    return state
+
+
 
 def run_pipeline(args: Any) -> Dict[str, Any]:
     """Execute a minimal end‑to‑end DCIP‑IEOS poisoning pipeline.

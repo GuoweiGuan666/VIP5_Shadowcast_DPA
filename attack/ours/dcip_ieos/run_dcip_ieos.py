@@ -198,6 +198,34 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Minimum number of text tokens required for saliency extraction.",
     )
+    # Additional robustness options used by the extended pipeline
+    parser.add_argument(
+        "--img-path-root",
+        default=None,
+        help="Root prefix for image paths stored in feature files.",
+    )
+    parser.add_argument(
+        "--allow-path-images",
+        action="store_true",
+        help="Allow image features specified as file paths and decode them on the fly.",
+    )
+    parser.add_argument(
+        "--allow-missing-text",
+        action="store_true",
+        help="Substitute missing text fields with a placeholder instead of aborting.",
+    )
+    parser.add_argument(
+        "--min-img-tokens",
+        type=int,
+        default=None,
+        help="Alias of --min-vis-tokens for backwards compatibility.",
+    )
+    parser.add_argument(
+        "--min-txt-tokens-new",
+        type=int,
+        default=None,
+        help="Alias of --min-txt-tokens for backwards compatibility.",
+    )
     parser.add_argument(
         "--attn-agg",
         choices=["mean", "max"],
@@ -734,7 +762,10 @@ def main() -> None:
         if not pool_item.get("image"):
             missing.append("image")
         if not pool_item.get("text"):
-            missing.append("text")
+            if args.allow_missing_text:
+                pool_item["text"] = "Generic item"
+            else:
+                missing.append("text")
         if missing:
             target = comp.get("target")
             msg = f"Target {target} missing {' and '.join(missing)} data"
@@ -753,14 +784,24 @@ def main() -> None:
         mask_pool = filtered_mask_pool
 
     extractor = SaliencyExtractor()
+    min_vis = (
+        args.min_img_tokens
+        if getattr(args, "min_img_tokens", None) is not None
+        else args.min_vis_tokens
+    )
+    min_txt = (
+        args.min_txt_tokens_new
+        if getattr(args, "min_txt_tokens_new", None) is not None
+        else args.min_txt_tokens
+    )
     masks, stats = extractor.extract_cross_modal_masks(
         mask_pool,
         cache_dir=args.cache_dir,
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
         model=victim_model,
-        min_vis_tokens=args.min_vis_tokens,
-        min_txt_tokens=args.min_txt_tokens,
+        min_vis_tokens=min_vis,
+        min_txt_tokens=min_txt,
         attn_agg=args.attn_agg,
     )
 
@@ -779,6 +820,29 @@ def main() -> None:
 
     _warn("Image", stats.get("image", {}), 0.05, 0.25)
     _warn("Text", stats.get("text", {}), 0.02, 0.15)
+
+    if args.dry_run and len(masks) >= 5:
+        img_mean = stats.get("image", {}).get("mean", 0.0)
+        txt_mean = stats.get("text", {}).get("mean", 0.0)
+        if not (0.05 <= img_mean <= 0.25):
+            raise RuntimeError("Image mask ratio out of expected range")
+        if not (0.02 <= txt_mean <= 0.15):
+            raise RuntimeError("Text mask ratio out of expected range")
+        anchor_dim = None
+        for entry in comp_pool:
+            anc = entry.get("anchor", [])
+            if anc:
+                anchor_dim = len(anc)
+                break
+        if anchor_dim is not None:
+            for entry in comp_pool:
+                anc = entry.get("anchor", [])
+                if anc and len(anc) != anchor_dim:
+                    raise RuntimeError("Anchors have inconsistent dimensions")
+        valid_targets = sum(1 for v in masks.values() if any(v.get(k) for k in ("image", "text")))
+        if valid_targets < 1:
+            raise RuntimeError("No valid targets after preprocessing")
+
 
     if args.debug_masks:
         debug_path = os.path.join(
