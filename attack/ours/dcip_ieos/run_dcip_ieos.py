@@ -278,15 +278,29 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--allow-missing-image",
+        dest="allow_missing_image",
         action="store_true",
         default=True,
         help="Allow zero-vector fallback when image features are missing.",
     )
     parser.add_argument(
+        "--no-allow-missing-image",
+        dest="allow_missing_image",
+        action="store_false",
+        help="Disallow zero-vector fallback when image features are missing.",
+    )
+    parser.add_argument(
         "--allow-missing-text",
+        dest="allow_missing_text",
         action="store_true",
         default=True,
         help="Allow empty-string fallback when text data is missing.",
+    )
+    parser.add_argument(
+        "--no-allow-missing-text",
+        dest="allow_missing_text",
+        action="store_false",
+        help="Disallow empty-string fallback when text data is missing.",
     )
     parser.add_argument(
         "--min-keywords",
@@ -517,6 +531,7 @@ def main() -> None:
                 "image_input": info.get("image_input", []),
                 "text_input": info.get("text_input", []),
                 "text": info.get("text", ""),
+                "category_ids": info.get("category_ids"),
             }
             for tid, info in raw_items.items()
         }
@@ -659,6 +674,7 @@ def main() -> None:
             "image_input": item.get("image_input") or item.get("image") or [],
             "text_input": item.get("text_input") or [],
             "text": item.get("text", ""),
+            "category_ids": item.get("category_ids"),
         }
 
     # ------------------------------------------------------------------
@@ -698,45 +714,8 @@ def main() -> None:
         pool_item = {
             "image": item.get("image") or item.get("image_input") or [],
             "text": item.get("text", ""),
+            "category_ids": item.get("category_ids"),
         }
-        if victim_model is not None:
-            try:
-                outputs = victim_model(
-                    pool_item["image"], pool_item["text"], output_attentions=True
-                )
-                if isinstance(outputs, dict):
-                    cross = outputs.get("cross_attentions")
-                else:
-                    cross = getattr(outputs, "cross_attentions", None)
-                if cross is not None:
-                    try:
-                        matrices = []
-                        if isinstance(cross, (list, tuple)):
-                            for layer in cross:
-                                if isinstance(layer, (list, tuple)):
-                                    for head in layer:
-                                        matrices.append(head)
-                                else:
-                                    matrices.append(layer)
-                        else:
-                            matrices.append(cross)
-                        if matrices:
-                            rows = len(matrices[0])
-                            cols = len(matrices[0][0]) if rows else 0
-                            avg = [[0.0] * cols for _ in range(rows)]
-                            for mat in matrices:
-                                for i in range(rows):
-                                    for j in range(cols):
-                                        avg[i][j] += float(mat[i][j])
-                            cross = [[v / len(matrices) for v in row] for row in avg]
-                        else:
-                            cross = None
-                    except Exception:
-                        cross = None
-                if cross is not None:
-                    pool_item["cross_attentions"] = cross
-            except Exception:
-                pass
         mask_pool.append(pool_item)
 
     filtered_comp_pool = []
@@ -764,8 +743,6 @@ def main() -> None:
     if args.skip_missing:
         comp_pool = filtered_comp_pool
         mask_pool = filtered_mask_pool
- 
-    vis_token_pos = [list(range(len(item.get("image", [])))) for item in mask_pool]
 
     extractor = SaliencyExtractor()
     masks, stats = extractor.extract_cross_modal_masks(
@@ -773,7 +750,7 @@ def main() -> None:
         cache_dir=args.cache_dir,
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
-        vis_token_pos=vis_token_pos,
+        model=victim_model,
     )
 
     def _warn(name: str, st: Dict[str, float], low: float, high: float) -> None:

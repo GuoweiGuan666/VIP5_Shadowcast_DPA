@@ -160,6 +160,12 @@ class PoolMiner:
                         f"No neighbor embeddings for target {entry.get('id', idx)}"
                     )
                 anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
+                assert (
+                    anchor_vec.ndim == 1 and anchor_vec.shape[0] == embeddings.shape[1]
+                ), (
+                    "anchor_dim=%s != emb_dim=%d; neighbor shapes=%s"
+                    % (anchor_vec.shape, embeddings.shape[1], [v.shape for v in vecs])
+                )
             else:
                 anchor_vec = np.zeros_like(embeddings[0])
 
@@ -419,12 +425,13 @@ def build_competition_pool(
                 "image_input": np.zeros(1, dtype=float),
                 "text_input": np.zeros(1, dtype=float),
                 "text": "",
+                "category_ids": np.zeros(1, dtype=int),
             }
         
     # Preload image feature dictionaries used as fallbacks when the item loader
     # fails to supply ``image_input``.  We try the main mapping first followed by
     # any shadowcast variations under ``poisoned``.
-    img_features: Dict[str, np.ndarray] = {}
+    img_features: Dict[str, Any] = {}
     img_feat_dim = 0
     img_dicts = [os.path.join(dataset_dir, "item2img_dict.pkl")]
     img_dicts += sorted(
@@ -437,30 +444,56 @@ def build_competition_pool(
             with open(path, "rb") as f:
                 data = pickle.load(f)
             for k, v in data.items():
-                vec = np.asarray(v, dtype=float).ravel()
-                if img_feat_dim == 0:
-                    img_feat_dim = len(vec)
-                img_features[str(k).upper()] = vec
+                key = str(k).upper()
+                img_features[key] = v
+                if img_feat_dim == 0 and not isinstance(v, str):
+                    try:
+                        vec_tmp = np.asarray(v, dtype=float).ravel()
+                        img_feat_dim = len(vec_tmp)
+                    except Exception:
+                        pass
         except Exception as e:  # pragma: no cover - corrupted pickle
             logging.warning("Failed to load image feature dict %s: %s", path, e)
 
+    
+    def _encode_image_path(path: str) -> np.ndarray:
+        """Best effort encoding of an image path to a feature vector."""
+        if path.endswith(".npy") and os.path.exists(path):
+            try:
+                arr = np.load(path).astype(float).ravel()
+                return arr
+            except Exception as e:
+                logging.warning("[ImageFeat] failed to load %s: %s", path, e)
+        logging.warning("[ImageFeat] cannot encode %s; using zeros", path)
+        return np.zeros((img_feat_dim or 512,), dtype=float)
+
+
     def get_image_vec(asin: str) -> tuple[np.ndarray, bool]:
         """Return image vector for ``asin`` or a synthetic zero vector."""
+        nonlocal img_feat_dim
         key = asin.upper()
         vec = img_features.get(key)
         if vec is None and asin2id:
             idx = asin2id.get(key) or asin2id.get(key.lower())
             if idx is not None:
-                vec = img_features.get(str(idx))
-                if vec is None:
-                    vec = img_features.get(str(idx).upper())
+                vec = img_features.get(str(idx)) or img_features.get(str(idx).upper())
+        if isinstance(vec, str):
+            arr = _encode_image_path(vec)
+            if img_feat_dim == 0:
+                img_feat_dim = len(arr)
+            return arr.copy(), False
+        if isinstance(vec, (list, tuple, np.ndarray)):
+            arr = np.asarray(vec, dtype=float).ravel()
+            if img_feat_dim == 0:
+                img_feat_dim = len(arr)
+            return arr.copy(), False
         if vec is None:
             if allow_missing_image:
                 logging.warning("[ImageFeat] synth zero vector for %s", key)
                 return np.zeros((img_feat_dim or 512,), dtype=float), True
             raise KeyError(f"image feat not found: {key}")
-        vec = np.asarray(vec, dtype=float).ravel()
-        return vec.copy(), False
+        logging.warning("[ImageFeat] invalid feature type for %s; using zeros", key)
+        return np.zeros((img_feat_dim or 512,), dtype=float), True
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
@@ -507,6 +540,7 @@ def build_competition_pool(
             "image": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
+            "category_ids": item.get("category_ids"),
         }
 
         if model is not None:
@@ -564,6 +598,7 @@ def build_competition_pool(
             "image": img_in.tolist(),
             "text_input": txt_in.tolist(),
             "text": text,
+            "category_ids": item.get("category_ids"),
         }
 
         if model is not None:
@@ -635,6 +670,12 @@ def build_competition_pool(
                     f"No neighbor embeddings for target {target_asins[idx]}"
                 )
             anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
+            assert (
+                anchor_vec.ndim == 1 and anchor_vec.shape[0] == high_matrix.shape[1]
+            ), (
+                "anchor_dim=%s != emb_dim=%d; neighbor shapes=%s"
+                % (anchor_vec.shape, high_matrix.shape[1], [v.shape for v in vecs])
+            )
         else:
             anchor_vec = (
                 tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])

@@ -130,10 +130,15 @@ class SaliencyExtractor:
                 text = str(text)
             return [float(ord(c)) for c in text]
 
-        def _topk_mask(scores: List[float], ratio: float) -> List[bool]:
+        def _topk_mask(scores: List[float], ratio: float, name: str) -> List[bool]:
             n = len(scores)
             if n == 0:
                 return []
+            if n <= 1:
+                logging.warning(
+                    "WARNING: %s tokens<=1 → mask coverage 100%%", name
+                )
+                return [True] * n
             k = max(int(math.ceil(n * float(ratio))), 1)
             k = min(k, n)
             indices = sorted(range(n), key=lambda i: scores[i], reverse=True)[:k]
@@ -227,11 +232,11 @@ class SaliencyExtractor:
                 img_scores = self.extract(image_vec)
                 txt_scores = self.extract(text_vec)
 
-            img_mask = _topk_mask(img_scores, top_p)
+            img_mask = _topk_mask(img_scores, top_p, "image")
             if not any(img_mask) and len(img_mask) > 0:
                 logging.warning("WARNING: empty image mask; randomly selecting one token")
                 img_mask[random.randrange(len(img_mask))] = True
-            txt_mask = _topk_mask(txt_scores, top_q)
+            txt_mask = _topk_mask(txt_scores, top_q, "text")
             if not any(txt_mask) and len(txt_mask) > 0:
                 logging.warning("WARNING: empty text mask; randomly selecting one token")
                 txt_mask[random.randrange(len(txt_mask))] = True
