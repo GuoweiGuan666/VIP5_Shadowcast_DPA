@@ -277,6 +277,18 @@ def parse_args() -> argparse.Namespace:
         help="Skip targets missing image or text data instead of raising an error.",
     )
     parser.add_argument(
+        "--allow-missing-image",
+        action="store_true",
+        default=True,
+        help="Allow zero-vector fallback when image features are missing.",
+    )
+    parser.add_argument(
+        "--allow-missing-text",
+        action="store_true",
+        default=True,
+        help="Allow empty-string fallback when text data is missing.",
+    )
+    parser.add_argument(
         "--min-keywords",
         type=int,
         default=5,
@@ -495,6 +507,8 @@ def main() -> None:
             keyword_top=args.keywords_top,
             id_mode=args.id_mode,
             min_keywords=args.min_keywords,
+            allow_missing_image=args.allow_missing_image,
+            allow_missing_text=args.allow_missing_text,
         )
         pool_dict = data.get("pool", {})
         raw_items = data.get("raw_items", {})

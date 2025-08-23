@@ -154,8 +154,12 @@ class PoolMiner:
 
             # Anchor embedding
             if neighbour_indices:
-                vecs = embeddings[neighbour_indices]
-                anchor_vec = np.mean(vecs, axis=0)
+                vecs = [embeddings[i] for i in neighbour_indices]
+                if not vecs:
+                    raise RuntimeError(
+                        f"No neighbor embeddings for target {entry.get('id', idx)}"
+                    )
+                anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
             else:
                 anchor_vec = np.zeros_like(embeddings[0])
 
@@ -232,6 +236,8 @@ def build_competition_pool(
     keyword_top: int = 50,
     id_mode: str = "auto",
     min_keywords: int = 5,
+    allow_missing_image: bool = True,
+    allow_missing_text: bool = True,
 ) -> Dict[str, Any]:
     """Build and cache the competition pool for a dataset.
 
@@ -276,6 +282,13 @@ def build_competition_pool(
     min_keywords:
         Minimum number of keywords required for a target. Targets falling
         short are supplemented with synthetic placeholders.
+    allow_missing_image:
+        When ``True`` (default) missing image features are replaced with
+        zero vectors. If ``False`` a missing feature triggers a ``KeyError``.
+    allow_missing_text:
+        When ``True`` (default) targets without text fall back to empty
+        strings and are tracked in ``missing_text_ids``. If ``False`` a
+        missing text field raises a ``KeyError``.
     """
 
     # ------------------------------------------------------------------
@@ -287,6 +300,7 @@ def build_competition_pool(
 
     meta_titles: Dict[str, str] = {}
     id2asin: Dict[str, str] = {}
+    asin2id: Dict[str, str] = {}
 
     if os.path.exists(datamap_path):
         try:
@@ -300,6 +314,7 @@ def build_competition_pool(
             if mapping:
                 for asin, idx in mapping.items():
                     id2asin[str(idx)] = str(asin)
+                    asin2id[str(asin).upper()] = str(idx)
             mapping = None
             for key in ("id2asin", "id_to_asin"):
                 if isinstance(dm.get(key), dict):
@@ -308,6 +323,7 @@ def build_competition_pool(
             if mapping:
                 for idx, asin in mapping.items():
                     id2asin[str(idx)] = str(asin)
+                    asin2id[str(asin).upper()] = str(idx)
         except Exception:  # pragma: no cover - corrupted datamap
             pass
 
@@ -425,45 +441,66 @@ def build_competition_pool(
                 if img_feat_dim == 0:
                     img_feat_dim = len(vec)
                 img_features[str(k).upper()] = vec
-        except Exception:  # pragma: no cover - corrupted pickle
-            logging.warning("Failed to load image feature dict %s", path)
+        except Exception as e:  # pragma: no cover - corrupted pickle
+            logging.warning("Failed to load image feature dict %s: %s", path, e)
+
+    def get_image_vec(asin: str) -> tuple[np.ndarray, bool]:
+        """Return image vector for ``asin`` or a synthetic zero vector."""
+        key = asin.upper()
+        vec = img_features.get(key)
+        if vec is None and asin2id:
+            idx = asin2id.get(key) or asin2id.get(key.lower())
+            if idx is not None:
+                vec = img_features.get(str(idx))
+                if vec is None:
+                    vec = img_features.get(str(idx).upper())
+        if vec is None:
+            if allow_missing_image:
+                logging.warning("[ImageFeat] synth zero vector for %s", key)
+                return np.zeros((img_feat_dim or 512,), dtype=float), True
+            raise KeyError(f"image feat not found: {key}")
+        vec = np.asarray(vec, dtype=float).ravel()
+        return vec.copy(), False
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
     raw_items: Dict[str, Dict[str, Any]] = {}
     missing_text_ids: List[int] = []
+    synth_img_count = 0
     for idx, item_id in enumerate(high_pop_ids):
         item = item_loader(item_id) or {}
+        asin = high_pop_asins[idx]
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            vec = img_features.get(asin.upper()) or img_features.get(str(item_id).upper())
-            if vec is not None:
-                img_in = vec.copy()
-            else:
-                if img_feat_dim == 0:
-                    img_feat_dim = 1
-                img_in = np.zeros(img_feat_dim, dtype=float)
-                logging.warning("No image feature found for item %s", item_id)
+            img_in, synth = get_image_vec(asin)
+            if synth:
+                synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
-        asin = high_pop_asins[idx]
         text = str(item.get("text", "") or "")
         if not text:
-            text = meta_titles.get(asin, "") or review_texts.get(asin, "") or review_texts.get(str(item_id), "")
-        if not text:
-            missing_sources = []
-            if not meta_titles.get(asin):
-                missing_sources.append("meta.json")
-            if not (review_texts.get(asin) or review_texts.get(str(item_id))):
-                missing_sources.append("review_splits.pkl")
-            logging.warning(
-                "No text found for item %s; missing sources: %s",
-                item_id,
-                ", ".join(missing_sources) or "none",
+            text = (
+                meta_titles.get(asin, "")
+                or review_texts.get(asin, "")
+                or review_texts.get(str(item_id), "")
             )
-            try:
-                missing_text_ids.append(int(str(item_id)))
-            except Exception:
-                pass
+        if not text:
+            if allow_missing_text:
+                missing_sources = []
+                if not meta_titles.get(asin):
+                    missing_sources.append("meta.json")
+                if not (review_texts.get(asin) or review_texts.get(str(item_id))):
+                    missing_sources.append("review_splits.pkl")
+                logging.warning(
+                    "No text found for item %s; missing sources: %s",
+                    item_id,
+                    ", ".join(missing_sources) or "none",
+                )
+                try:
+                    missing_text_ids.append(int(str(item_id)))
+                except Exception:
+                    pass
+            else:
+                raise KeyError(f"text not found for item {item_id}")
 
         raw_items[asin] = {
             "image_input": img_in.tolist(),
@@ -492,33 +529,35 @@ def build_competition_pool(
         item = item_loader(item_id) or {}
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            vec = img_features.get(asin.upper()) or img_features.get(str(item_id).upper())
-            if vec is not None:
-                img_in = vec.copy()
-            else:
-                if img_feat_dim == 0:
-                    img_feat_dim = 1
-                img_in = np.zeros(img_feat_dim, dtype=float)
-                logging.warning("No image feature found for item %s", item_id)
+            img_in, synth = get_image_vec(asin)
+            if synth:
+                synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
         text = str(item.get("text", "") or "")
         if not text:
-            text = meta_titles.get(asin, "") or review_texts.get(asin, "") or review_texts.get(str(item_id), "")
-        if not text:
-            missing_sources = []
-            if not meta_titles.get(asin):
-                missing_sources.append("meta.json")
-            if not (review_texts.get(asin) or review_texts.get(str(item_id))):
-                missing_sources.append("review_splits.pkl")
-            logging.warning(
-                "No text found for item %s; missing sources: %s",
-                item_id,
-                ", ".join(missing_sources) or "none",
+            text = (
+                meta_titles.get(asin, "")
+                or review_texts.get(asin, "")
+                or review_texts.get(str(item_id), "")
             )
-            try:
-                missing_text_ids.append(int(str(item_id)))
-            except Exception:
-                pass
+        if not text:
+            if allow_missing_text:
+                missing_sources = []
+                if not meta_titles.get(asin):
+                    missing_sources.append("meta.json")
+                if not (review_texts.get(asin) or review_texts.get(str(item_id))):
+                    missing_sources.append("review_splits.pkl")
+                logging.warning(
+                    "No text found for item %s; missing sources: %s",
+                    item_id,
+                    ", ".join(missing_sources) or "none",
+                )
+                try:
+                    missing_text_ids.append(int(str(item_id)))
+                except Exception:
+                    pass
+            else:
+                raise KeyError(f"text not found for item {item_id}")
 
         raw_items[asin] = {
             "image_input": img_in.tolist(),
@@ -590,10 +629,16 @@ def build_competition_pool(
 
         comp_ids = [high_pop_asins[i] for i in neigh_indices]
         if neigh_indices:
-            vecs = high_matrix[neigh_indices]
-            anchor_vec = np.mean(vecs, axis=0)
+            vecs = [high_matrix[i] for i in neigh_indices]
+            if not vecs:
+                raise RuntimeError(
+                    f"No neighbor embeddings for target {target_asins[idx]}"
+                )
+            anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
         else:
-            anchor_vec = tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
+            anchor_vec = (
+                tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
+            )
 
         target_asin = target_asins[idx]
         pool[target_asin] = {
@@ -650,9 +695,8 @@ def build_competition_pool(
         idx_str = asin
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
-        key = asin.upper()
-        vec = img_features.get(key) or img_features.get(str(idx_str).upper())
-        if vec is None:
+        vec, synth = get_image_vec(asin)
+        if synth:
             npy_candidates = [
                 os.path.join(dataset_dir, f"{asin}.npy"),
                 os.path.join(dataset_dir, f"{idx_str}.npy"),
@@ -663,17 +707,24 @@ def build_competition_pool(
                     try:
                         arr = np.load(path)
                         vec = np.asarray(arr, dtype=float).ravel()
+                        synth = False
                         if img_feat_dim == 0:
                             img_feat_dim = len(vec)
                         break
                     except Exception:  # pragma: no cover - invalid npy
-                                                vec = None
+                        vec = None
         if vec is None:
-            if img_feat_dim == 0:
-                img_feat_dim = 1
-            logging.warning("[ImageFeat] synth for %s", key)
-            vec = np.zeros(img_feat_dim, dtype=float)
+            vec = np.zeros((img_feat_dim or 512,), dtype=float)
         items_meta[asin] = {"title": title, "image_feat": vec.tolist()}
+
+    # ------------------------------------------------------------------
+    total_items = len(high_pop_ids) + len(target_asins)
+    logging.info(
+        "Image features synthesised for %d/%d items; missing text for %d items",
+        synth_img_count,
+        total_items,
+        len(missing_text_ids),
+    )
 
     # ------------------------------------------------------------------
     # 5) Persist to disk
