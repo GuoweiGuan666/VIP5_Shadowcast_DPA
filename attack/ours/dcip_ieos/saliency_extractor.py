@@ -158,6 +158,18 @@ class SaliencyExtractor:
             text_raw = item.get("text", "")
             text_vec = _encode_text(text_raw)
 
+            n_img = len(image_vec)
+            n_txt = len(text_vec)
+            if n_img <= 1 or n_txt <= 1:
+                logging.warning(
+                    "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
+                    n_img,
+                    n_txt,
+                    idx,
+                )
+                masks[idx] = {"image": [True] * n_img, "text": [True] * n_txt}
+                continue
+
             cross_attn: Optional[List[List[float]]] = None
             warn_fallback = False
             if model is not None:

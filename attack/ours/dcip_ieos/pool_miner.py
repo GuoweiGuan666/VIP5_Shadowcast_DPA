@@ -181,11 +181,12 @@ class PoolMiner:
                         f"No neighbor embeddings for target {entry.get('id', idx)}"
                     )
                 anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
+                d_model = embeddings.shape[1]
                 assert (
-                    anchor_vec.ndim == 1 and anchor_vec.shape[0] == embeddings.shape[1]
+                    anchor_vec.ndim == 1 and anchor_vec.shape[0] == d_model
                 ), (
-                    "anchor_dim=%s != emb_dim=%d; neighbor shapes=%s"
-                    % (anchor_vec.shape, embeddings.shape[1], [v.shape for v in vecs])
+                    f"Bad anchor_dim={anchor_vec.shape}, expect [d_model={d_model}]. "
+                    f"neighbor shapes={[np.asarray(v).shape for v in vecs[:5]]}"
                 )
             else:
                 anchor_vec = np.zeros_like(embeddings[0])
@@ -497,31 +498,48 @@ def build_competition_pool(
         if vec is None and asin2id:
             idx = asin2id.get(key) or asin2id.get(key.lower())
             if idx is not None:
-                vec = img_features.get(str(idx)) or img_features.get(str(idx).upper())
+                vec = img_features.get(str(idx))
+                if vec is None:
+                    vec = img_features.get(str(idx).upper())
         if isinstance(vec, str):
             arr = _encode_image_path(vec)
             if img_feat_dim == 0:
                 img_feat_dim = len(arr)
             return arr.copy(), False
+        
         if isinstance(vec, (list, tuple, np.ndarray)):
-            arr = np.asarray(vec, dtype=float).ravel()
-            if arr.size <= 1:
-                logging.warning(
-                    "[ImageFeat] insufficient vector length %d for %s; using zeros",
-                    arr.size,
-                    key,
-                )
+            arr = np.asarray(vec, dtype=float)
+            if arr.ndim == 1:
+                if arr.size <= 1:
+                    logging.warning(
+                        "[ImageFeat] insufficient vector length %d for %s; using zeros",
+                        arr.size,
+                        key,
+                    )
+                    if img_feat_dim == 0:
+                        img_feat_dim = arr.shape[0]
+                return arr.copy(), False
+            if arr.ndim == 2:
                 if img_feat_dim == 0:
-                    img_feat_dim = 512
-                return np.zeros((img_feat_dim,), dtype=float), True
-            if img_feat_dim == 0:
-                img_feat_dim = len(arr)
-            return arr.copy(), False
+                    img_feat_dim = arr.shape[1]
+                try:
+                    return arr.mean(axis=0).astype(float), False
+                except Exception:
+                    logging.warning(
+                        "[ImageFeat] cannot mean-pool %s with shape %s; using first row",
+                        key,
+                        arr.shape,
+                    )
+                    arr = arr.reshape(arr.shape[0], -1)[0]
+                    if img_feat_dim == 0:
+                        img_feat_dim = arr.shape[0]
+                    return arr.astype(float), False
         if vec is None:
             if allow_missing_image:
                 logging.warning("[ImageFeat] synth zero vector for %s", key)
                 return np.zeros((img_feat_dim or 512,), dtype=float), True
             raise KeyError(f"image feat not found: {key}")
+        
         logging.warning("[ImageFeat] invalid feature type for %s; using zeros", key)
         return np.zeros((img_feat_dim or 512,), dtype=float), True
 
@@ -688,11 +706,12 @@ def build_competition_pool(
                     f"No neighbor embeddings for target {target_asins[idx]}"
                 )
             anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
+            d_model = high_matrix.shape[1]
             assert (
-                anchor_vec.ndim == 1 and anchor_vec.shape[0] == high_matrix.shape[1]
+                anchor_vec.ndim == 1 and anchor_vec.shape[0] == d_model
             ), (
-                "anchor_dim=%s != emb_dim=%d; neighbor shapes=%s"
-                % (anchor_vec.shape, high_matrix.shape[1], [v.shape for v in vecs])
+                f"Bad anchor_dim={anchor_vec.shape}, expect [d_model={d_model}]. "
+                f"neighbor shapes={[np.asarray(v).shape for v in vecs[:5]]}"
             )
         else:
             anchor_vec = (
