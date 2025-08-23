@@ -92,6 +92,10 @@ class SaliencyExtractor:
         top_q: float = 0.15,
         vis_token_pos: Optional[Iterable[Iterable[int]]] = None,
         model: Optional[Any] = None,
+        *,
+        min_vis_tokens: int = 2,
+        min_txt_tokens: int = 2,
+        attn_agg: str = "mean",
     ) -> Tuple[Dict[int, Dict[str, List[bool]]], Dict[str, Dict[str, float]]]:
         """Compute cross‑modal saliency masks for ``items``.
 
@@ -150,6 +154,8 @@ class SaliencyExtractor:
         masks: Dict[int, Dict[str, List[bool]]] = {}
         img_ratios: List[float] = []
         txt_ratios: List[float] = []
+        skipped = 0
+        fallback_count = 0
 
         vis_pos_list = list(vis_token_pos) if vis_token_pos is not None else None
 
@@ -161,13 +167,15 @@ class SaliencyExtractor:
             n_img = len(image_vec)
             n_txt = len(text_vec)
             if n_img <= 1 or n_txt <= 1:
+                if n_img < int(min_vis_tokens) or n_txt < int(min_txt_tokens):
                 logging.warning(
                     "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
                     n_img,
                     n_txt,
                     idx,
                 )
-                masks[idx] = {"image": [True] * n_img, "text": [True] * n_txt}
+                masks[idx] = {"image": [False] * n_img, "text": [False] * n_txt}
+                skipped += 1
                 continue
 
             cross_attn: Optional[List[List[float]]] = None
@@ -194,6 +202,7 @@ class SaliencyExtractor:
             if cross_attn is None:
                 if warn_fallback:
                     logging.warning("WARNING: fallback to outer-product")
+                    fallback_count += 1
                 try:
                     cross_attn = [
                         [abs(i_val * t_val) for t_val in text_vec]
@@ -236,6 +245,12 @@ class SaliencyExtractor:
                 try:
                     img_scores = [sum(row) for row in cross_attn]
                     txt_scores = [sum(col) for col in zip(*cross_attn)] if cross_attn else []
+                    if attn_agg == "max":
+                        img_scores = [max(row) for row in cross_attn]
+                        txt_scores = [max(col) for col in zip(*cross_attn)] if cross_attn else []
+                    else:
+                        img_scores = [sum(row) for row in cross_attn]
+                        txt_scores = [sum(col) for col in zip(*cross_attn)] if cross_attn else []
                 except Exception:
                     img_scores = self.extract(image_vec)
                     txt_scores = self.extract(text_vec)
@@ -293,6 +308,11 @@ class SaliencyExtractor:
             }
 
         stats = {"image": _summary(img_ratios), "text": _summary(txt_ratios)}
+        total = len(img_ratios) + skipped
+        stats["fallback_rate"] = (
+            float(fallback_count) / float(total) if total else 0.0
+        )
+        stats["skipped"] = skipped
 
         logging.info(
             "Image mask ratios: mean=%.3f median=%.3f p90=%.3f min=%.3f max=%.3f",

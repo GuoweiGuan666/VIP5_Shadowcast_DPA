@@ -187,6 +187,24 @@ def parse_args() -> argparse.Namespace:
         help="Proportion of text tokens kept in the cross-modal mask.",
     )
     parser.add_argument(
+        "--min-vis-tokens",
+        type=int,
+        default=2,
+        help="Minimum number of image tokens required for saliency extraction.",
+    )
+    parser.add_argument(
+        "--min-txt-tokens",
+        type=int,
+        default=2,
+        help="Minimum number of text tokens required for saliency extraction.",
+    )
+    parser.add_argument(
+        "--attn-agg",
+        choices=["mean", "max"],
+        default="mean",
+        help="Aggregation method for cross-attention maps.",
+    )
+    parser.add_argument(
         "--p-insert",
         type=float,
         default=0.2,
@@ -741,6 +759,9 @@ def main() -> None:
         top_p=float(args.mask_top_p),
         top_q=float(args.mask_top_q),
         model=victim_model,
+        min_vis_tokens=args.min_vis_tokens,
+        min_txt_tokens=args.min_txt_tokens,
+        attn_agg=args.attn_agg,
     )
 
     def _warn(name: str, st: Dict[str, float], low: float, high: float) -> None:
