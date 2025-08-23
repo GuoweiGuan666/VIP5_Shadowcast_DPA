@@ -168,12 +168,12 @@ class SaliencyExtractor:
             n_txt = len(text_vec)
             if n_img <= 1 or n_txt <= 1:
                 if n_img < int(min_vis_tokens) or n_txt < int(min_txt_tokens):
-                logging.warning(
-                    "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
-                    n_img,
-                    n_txt,
-                    idx,
-                )
+                    logging.warning(
+                        "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
+                        n_img,
+                        n_txt,
+                        idx,
+                    )
                 masks[idx] = {"image": [False] * n_img, "text": [False] * n_txt}
                 skipped += 1
                 continue
