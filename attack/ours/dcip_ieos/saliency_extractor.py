@@ -100,7 +100,7 @@ class SaliencyExtractor:
         vis_token_pos: Optional[Iterable[Iterable[int]]] = None,
         model: Optional[Any] = None,
         *,
-        min_vis_tokens: int = 2,
+        min_vis_tokens: int = 1,
         min_txt_tokens: int = 2,
         attn_agg: str = "mean",
     ) -> Tuple[Dict[int, Dict[str, List[bool]]], Dict[str, Dict[str, float]]]:
@@ -173,17 +173,18 @@ class SaliencyExtractor:
 
             n_img = len(image_vec)
             n_txt = len(text_vec)
-            if n_img <= 1 or n_txt <= 1:
-                if n_img < int(min_vis_tokens) or n_txt < int(min_txt_tokens):
-                    logging.warning(
-                        "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
-                        n_img,
-                        n_txt,
-                        idx,
-                    )
+            if n_img < int(min_vis_tokens) or n_txt < int(min_txt_tokens):
+                logging.warning(
+                    "WARNING: insufficient tokens (image=%d text=%d) → skipping item %d",
+                    n_img,
+                    n_txt,
+                    idx,
+                )
                 masks[idx] = {"image": [False] * n_img, "text": [False] * n_txt}
                 skipped += 1
                 continue
+            if n_img == 1:
+                logging.info("Degenerate sample: n_img==1 for item %d", idx)
 
             cross_attn: Optional[List[List[float]]] = None
             warn_fallback = False
@@ -195,12 +196,18 @@ class SaliencyExtractor:
                         cross_attn_tmp = output.get("cross_attentions")
                     if cross_attn_tmp is not None:
                         cross_attn_tmp = [list(map(float, row)) for row in cross_attn_tmp]
-                        n_img = len(image_vec)
-                        n_txt = len(text_vec)
-                        if len(cross_attn_tmp) != n_img or any(len(row) != n_txt for row in cross_attn_tmp):
-                            warn_fallback = True
+                        arr = cross_attn_tmp
+                        if len(arr) == n_img + 1:
+                            arr = arr[1:]
+                        if arr and len(arr[0]) == n_txt + 1:
+                            arr = [row[1:] for row in arr]
+                        if len(arr) == n_img and all(len(row) == n_txt for row in arr):
+                            cross_attn = arr
+                            assert len(cross_attn) == n_img and all(
+                                len(r) == n_txt for r in cross_attn
+                            ), f"got {len(cross_attn)}x{len(cross_attn[0]) if cross_attn else 0}, expect {(n_img, n_txt)}"
                         else:
-                            cross_attn = cross_attn_tmp
+                            warn_fallback = True
                     else:
                         warn_fallback = True
                 except Exception:
@@ -339,6 +346,13 @@ class SaliencyExtractor:
             stats["text"]["min"],
             stats["text"]["max"],
         )
+        if stats["fallback_rate"] > 0.2:
+            logging.warning(
+                "WARNING: fallback_rate %.1f%% >20%%",
+                stats["fallback_rate"] * 100,
+            )
+        else:
+            logging.info("fallback_rate %.1f%%", stats["fallback_rate"] * 100)
 
         return masks, stats
     
@@ -489,6 +503,21 @@ def get_masks(model: Optional[Any], state: Dict[str, Any], use_cache: bool) -> D
     items = [{"image": img_feat, "text": txt_feat, "image_feat": img_feat}]
     masks, _ = extractor.extract_cross_modal_masks(items, model=model)
     mask = masks.get(0, {"image": [], "text": []})
+
+    img_cov = (
+        sum(1 for b in mask.get("image", []) if b) / len(mask.get("image", []))
+        if mask.get("image")
+        else 0.0
+    )
+    txt_cov = (
+        sum(1 for b in mask.get("text", []) if b) / len(mask.get("text", []))
+        if mask.get("text")
+        else 0.0
+    )
+    logging.info(
+        "mask_coverage image=%.3f text=%.3f", img_cov, txt_cov
+    )
+
 
     if isinstance(state, dict):
         state["mask"] = mask

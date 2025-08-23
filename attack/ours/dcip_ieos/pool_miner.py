@@ -97,21 +97,36 @@ def load_image_feature_any(
         if preprocess is not None:
             pixel = preprocess(img)
         else:
-            pixel = np.asarray(img, dtype="float32") / 255.0
-        if victim_model is not None and hasattr(victim_model, "extract_raw_image_feats"):
-            feats = victim_model.extract_raw_image_feats(pixel)  # type: ignore[attr-defined]
-            if torch is not None and isinstance(feats, torch.Tensor):
-                feats_np = feats.detach().cpu().numpy()
-            else:
-                feats_np = np.asarray(feats, dtype="float32")
+            arr = np.asarray(img, dtype="float32") / 255.0
+            pixel = torch.from_numpy(np.transpose(arr, (2, 0, 1))) if torch is not None else np.transpose(arr, (2, 0, 1))
+        if victim_model is not None and torch is not None and hasattr(victim_model.encoder, "visual_embedding"):
+            tensor = pixel if isinstance(pixel, torch.Tensor) else torch.as_tensor(pixel)
+            tensor = tensor.unsqueeze(0) if tensor.ndim == 3 else tensor
+            tensor = tensor.to(getattr(victim_model, "device", "cpu"))
+            with torch.no_grad():
+                emb = victim_model.encoder.visual_embedding(tensor)  # type: ignore[attr-defined]
+            if emb.ndim == 4:
+                emb = emb.view(emb.shape[0], -1, emb.shape[-1])
+            feats_np = emb.detach().cpu().numpy()[0]
+            src = "path->encoder"
         else:
             feats_np = np.asarray(pixel, dtype="float32").reshape(-1)
-        src = "path->encoder"
+            src = "path->pixels"
     else:
         feats_np = np.asarray(img_feat_entry, dtype="float32")
+        if feats_np.ndim == 1 and victim_model is not None:
+            d_model = getattr(victim_model, "d_model", lambda: feats_np.shape[0])()
+            feats_np = np.tile(feats_np[None, :], (max(8, 1), 1))
+            src = "vector->repeat"
 
     assert np.isfinite(feats_np).all(), "Non-finite image features"
-    assert feats_np.ndim in (1, 2), f"Unexpected img feats ndim={feats_np.ndim}"
+    if victim_model is not None and hasattr(victim_model, "d_model") and feats_np.ndim == 2:
+        d_model = getattr(victim_model, "d_model")
+        d_model = d_model() if callable(d_model) else int(d_model)
+        assert (
+            feats_np.shape[1] == d_model and feats_np.shape[0] >= 1
+        ), f"img_emb shape {feats_np.shape}, expect (*,{d_model})"
+        logging.info("Encoded %s -> L_img=%d", asin, feats_np.shape[0])
     logging.debug(
         "Loaded image feats: asin=%s shape=%s from %s",
         asin,
@@ -271,7 +286,7 @@ class PoolMiner:
                 {
                     "target": entry.get("id", idx),
                     "competitors": competitors,
-                    "anchor": anchor_vec.tolist(),
+                    "anchor": _to_jsonable(anchor_vec),
                     "keywords": keywords,
                 }
             )
@@ -307,8 +322,14 @@ class PoolMiner:
                 }
             )
 
+        obj_jsonable = _to_jsonable(validated)
+        try:
+            json.dumps(obj_jsonable)
+        except TypeError as e:
+            raise AssertionError(f"not JSON-safe: {e}")
+
         with open(self.out_path, "w", encoding="utf-8") as f:
-            json.dump(validated, f, ensure_ascii=False, indent=2)
+            json.dump(obj_jsonable, f, ensure_ascii=False, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -626,20 +647,13 @@ def build_competition_pool(
             logging.warning("Failed to load image feature dict %s: %s", path, e)
 
     
-    def _encode_image_path(path: str) -> np.ndarray:
-        """Best effort encoding of an image path to a feature vector."""
-        if path.endswith(".npy") and os.path.exists(path):
-            try:
-                arr = np.load(path).astype(float).ravel()
-                return arr
-            except Exception as e:
-                logging.warning("[ImageFeat] failed to load %s: %s", path, e)
-        logging.warning("[ImageFeat] cannot encode %s; using zeros", path)
-        return np.zeros((img_feat_dim or 512,), dtype=float)
+    def get_image_vec(asin: str) -> tuple[np.ndarray, bool, bool]:
+        """Return image array for ``asin``.
 
+        Returns a tuple of ``(array, synthetic, from_path)`` where ``array`` is
+        suitable to be passed to :func:`forward_inference`.
+        """
 
-    def get_image_vec(asin: str) -> tuple[np.ndarray, bool]:
-        """Return image vector for ``asin`` or a synthetic zero vector."""
         nonlocal img_feat_dim
         key = asin.upper()
         vec = img_features.get(key)
@@ -650,58 +664,57 @@ def build_competition_pool(
                 if vec is None:
                     vec = img_features.get(str(idx).upper())
         if isinstance(vec, str):
-            arr = _encode_image_path(vec)
-            if img_feat_dim == 0:
-                img_feat_dim = len(arr)
-            return arr.copy(), False
+            abs_path = (
+                vec if os.path.isabs(vec) else os.path.join(dataset_dir, vec)
+            )
+            try:
+                if Image is None:
+                    raise RuntimeError("PIL missing")
+                img = Image.open(abs_path).convert("RGB")
+                preprocess = getattr(model, "preprocess", None)
+                if preprocess is not None:
+                    pixel = preprocess(img)
+                    if torch is not None and isinstance(pixel, torch.Tensor):
+                        arr = pixel.detach().cpu().numpy()
+                    else:
+                        arr = np.asarray(pixel, dtype="float32")
+                else:
+                    arr = np.asarray(img, dtype="float32") / 255.0
+                    if arr.ndim == 3:
+                        arr = np.transpose(arr, (2, 0, 1))
+                return arr, False, True
+            except Exception as e:
+                logging.warning("[ImageFeat] failed to load %s: %s", abs_path, e)
+                if img_feat_dim == 0:
+                    img_feat_dim = 512
+                return np.zeros((img_feat_dim,), dtype=float), True, True
         
         if isinstance(vec, (list, tuple, np.ndarray)):
             arr = np.asarray(vec, dtype=float)
-            if arr.ndim == 1:
-                if arr.size <= 1:
-                    logging.warning(
-                        "[ImageFeat] insufficient vector length %d for %s; using zeros",
-                        arr.size,
-                        key,
-                    )
-                    if img_feat_dim == 0:
-                        img_feat_dim = arr.shape[0]
-                return arr.copy(), False
-            if arr.ndim == 2:
-                if img_feat_dim == 0:
-                    img_feat_dim = arr.shape[1]
-                try:
-                    return arr.mean(axis=0).astype(float), False
-                except Exception:
-                    logging.warning(
-                        "[ImageFeat] cannot mean-pool %s with shape %s; using first row",
-                        key,
-                        arr.shape,
-                    )
-                    arr = arr.reshape(arr.shape[0], -1)[0]
-                    if img_feat_dim == 0:
-                        img_feat_dim = arr.shape[0]
-                    return arr.astype(float), False
+            return arr.copy(), False, False
         if vec is None:
             if allow_missing_image:
                 logging.warning("[ImageFeat] synth zero vector for %s", key)
-                return np.zeros((img_feat_dim or 512,), dtype=float), True
+                return np.zeros((img_feat_dim or 512,), dtype=float), True, False
             raise KeyError(f"image feat not found: {key}")
         
         logging.warning("[ImageFeat] invalid feature type for %s; using zeros", key)
-        return np.zeros((img_feat_dim or 512,), dtype=float), True
+        return np.zeros((img_feat_dim or 512,), dtype=float), True, False
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
     raw_items: Dict[str, Dict[str, Any]] = {}
     missing_text_ids: List[int] = []
     synth_img_count = 0
+    high_img_tokens: List[np.ndarray] = []
+    high_txt_tokens: List[np.ndarray] = []
     for idx, item_id in enumerate(high_pop_ids):
         item = item_loader(item_id) or {}
         asin = high_pop_asins[idx]
+        from_path = False
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            img_in, synth = get_image_vec(asin)
+            img_in, synth, from_path = get_image_vec(asin)
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -731,29 +744,56 @@ def build_competition_pool(
             else:
                 raise KeyError(f"text not found for item {item_id}")
 
-        raw_items[asin] = {"image": img_in.tolist(), "text": text}
+        raw_items[asin] = {"image": _to_jsonable(img_in), "text": text}
 
         if model is not None:
             outputs = forward_inference(model, img_in, txt_in)
-            img_emb = np.asarray(outputs.get("image_embedding", np.zeros(1))).astype(float).ravel()
-            txt_emb = np.asarray(outputs.get("text_embedding", np.zeros(1))).astype(float).ravel()
+            img_emb = outputs.get("image_embedding")
+            txt_emb = outputs.get("text_embedding")
+            if torch is not None:
+                img_emb = img_emb.detach().cpu().numpy() if isinstance(img_emb, torch.Tensor) else np.asarray(img_emb)
+                txt_emb = txt_emb.detach().cpu().numpy() if isinstance(txt_emb, torch.Tensor) else np.asarray(txt_emb)
+            else:
+                img_emb = np.asarray(img_emb)
+                txt_emb = np.asarray(txt_emb)
+            if img_emb.ndim == 3:
+                img_emb = img_emb[0]
+            if txt_emb.ndim == 3:
+                txt_emb = txt_emb[0]
+            d_model = img_emb.shape[1] if img_emb.ndim == 2 else txt_emb.shape[1]
+            assert img_emb.ndim == 2 and img_emb.shape[1] == d_model and img_emb.shape[0] >= 1, (
+                f"img_emb shape {img_emb.shape} invalid"
+            )
+            if from_path:
+                logging.info("Encoded image %s into %d tokens", asin, img_emb.shape[0])
+            e_img_item = np.mean(img_emb, axis=0)
+            e_txt_item = np.mean(txt_emb, axis=0)
+            fused = w_img * e_img_item + w_txt * e_txt_item
+            fused_high.append(fused)
+            high_img_tokens.append(img_emb)
+            high_txt_tokens.append(txt_emb)
         else:  # pragma: no cover - used only in CLI fallbacks
-            img_emb = img_in.ravel()
-            txt_emb = txt_in.ravel()
-        fused = w_img * img_emb + w_txt * txt_emb
-        fused_high.append(fused)
+            img_emb = img_in.reshape(1, -1)
+            txt_emb = txt_in.reshape(1, -1)
+            fused = w_img * img_emb.mean(axis=0) + w_txt * txt_emb.mean(axis=0)
+            fused_high.append(fused)
+            high_img_tokens.append(img_emb)
+            high_txt_tokens.append(txt_emb)
         texts.append(text)
 
     fused_tgts: List[np.ndarray] = []
-    targets = list(targets)
     target_asins: List[str] = []
+    target_img_tokens: List[np.ndarray] = []
+    target_txt_tokens: List[np.ndarray] = []
+    targets = list(targets)
     for item_id in targets:
         asin = id2asin.get(str(item_id), str(item_id))
         target_asins.append(asin)
         item = item_loader(item_id) or {}
+        from_path = False
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            img_in, synth = get_image_vec(asin)
+            img_in, synth, from_path = get_image_vec(asin)
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -783,17 +823,41 @@ def build_competition_pool(
             else:
                 raise KeyError(f"text not found for item {item_id}")
 
-        raw_items[asin] = {"image": img_in.tolist(), "text": text}
+        raw_items[asin] = {"image": _to_jsonable(img_in), "text": text}
 
         if model is not None:
             outputs = forward_inference(model, img_in, txt_in)
-            img_emb = np.asarray(outputs.get("image_embedding", np.zeros(1))).astype(float).ravel()
-            txt_emb = np.asarray(outputs.get("text_embedding", np.zeros(1))).astype(float).ravel()
+            img_emb = outputs.get("image_embedding")
+            txt_emb = outputs.get("text_embedding")
+            if torch is not None:
+                img_emb = img_emb.detach().cpu().numpy() if isinstance(img_emb, torch.Tensor) else np.asarray(img_emb)
+                txt_emb = txt_emb.detach().cpu().numpy() if isinstance(txt_emb, torch.Tensor) else np.asarray(txt_emb)
+            else:
+                img_emb = np.asarray(img_emb)
+                txt_emb = np.asarray(txt_emb)
+            if img_emb.ndim == 3:
+                img_emb = img_emb[0]
+            if txt_emb.ndim == 3:
+                txt_emb = txt_emb[0]
+            d_model = img_emb.shape[1] if img_emb.ndim == 2 else txt_emb.shape[1]
+            assert img_emb.ndim == 2 and img_emb.shape[1] == d_model and img_emb.shape[0] >= 1, (
+                f"img_emb shape {img_emb.shape} invalid"
+            )
+            if from_path:
+                logging.info("Encoded image %s into %d tokens", asin, img_emb.shape[0])
+            e_img_item = np.mean(img_emb, axis=0)
+            e_txt_item = np.mean(txt_emb, axis=0)
+            fused = w_img * e_img_item + w_txt * e_txt_item
+            fused_tgts.append(fused)
+            target_img_tokens.append(img_emb)
+            target_txt_tokens.append(txt_emb)
         else:  # pragma: no cover - used only in CLI fallbacks
-            img_emb = img_in.ravel()
-            txt_emb = txt_in.ravel()
-        fused = w_img * img_emb + w_txt * txt_emb
-        fused_tgts.append(fused)
+            img_emb = img_in.reshape(1, -1)
+            txt_emb = txt_in.reshape(1, -1)
+            fused = w_img * img_emb.mean(axis=0) + w_txt * txt_emb.mean(axis=0)
+            fused_tgts.append(fused)
+            target_img_tokens.append(img_emb)
+            target_txt_tokens.append(txt_emb)
 
     high_matrix = np.vstack(fused_high)
     tgt_matrix = np.vstack(fused_tgts) if fused_tgts else np.zeros((0, high_matrix.shape[1]))
@@ -848,28 +912,31 @@ def build_competition_pool(
 
         comp_ids = [high_pop_asins[i] for i in neigh_indices]
         if neigh_indices:
-            vecs = [high_matrix[i] for i in neigh_indices]
-            if not vecs:
-                raise RuntimeError(
-                    f"No neighbor embeddings for target {target_asins[idx]}"
-                )
-            anchor_vec = np.mean(np.stack(vecs, axis=0), axis=0)
-            d_model = high_matrix.shape[1]
-            assert (
-                anchor_vec.ndim == 1 and anchor_vec.shape[0] == d_model
-            ), (
-                f"Bad anchor_dim={anchor_vec.shape}, expect [d_model={d_model}]. "
-                f"neighbor shapes={[np.asarray(v).shape for v in vecs[:5]]}"
+            img_vecs = [np.mean(high_img_tokens[i], axis=0) for i in neigh_indices]
+            txt_vecs = [np.mean(high_txt_tokens[i], axis=0) for i in neigh_indices]
+            e_img = np.mean(np.stack(img_vecs, axis=0), axis=0)
+            e_txt = np.mean(np.stack(txt_vecs, axis=0), axis=0)
+            anchor_vec = w_img * e_img + w_txt * e_txt
+            d_model = anchor_vec.shape[0]
+            assert anchor_vec.ndim == 1 and anchor_vec.shape[0] == d_model, (
+                f"anchor_dim={anchor_vec.shape}, expect ({d_model},)"
             )
         else:
             anchor_vec = (
                 tgt_matrix[idx] if tgt_matrix.size else np.zeros(high_matrix.shape[1])
             )
 
+        logging.info(
+            "anchor_dim=%d head=%s tail=%s",
+            anchor_vec.shape[0],
+            np.round(anchor_vec[:3], 4).tolist(),
+            np.round(anchor_vec[-3:], 4).tolist(),
+        )
+
         target_asin = target_asins[idx]
         pool[target_asin] = {
             "competitors": comp_ids,
-            "anchor": anchor_vec.tolist(),
+            "anchor": _to_jsonable(anchor_vec),
         }
 
         neigh_texts = [texts[i] for i in neigh_indices]
@@ -921,7 +988,7 @@ def build_competition_pool(
         idx_str = asin
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
-        vec, synth = get_image_vec(asin)
+        vec, synth, _ = get_image_vec(asin)
         if synth:
             npy_candidates = [
                 os.path.join(dataset_dir, f"{asin}.npy"),
@@ -978,8 +1045,14 @@ def build_competition_pool(
         },
     }
 
+    obj_jsonable = _to_jsonable(data)
+    try:
+        json.dumps(obj_jsonable)
+    except TypeError as e:
+        raise AssertionError(f"not JSON-safe: {e}")
+
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(_to_jsonable(data), f, ensure_ascii=False, indent=2)
+        json.dump(obj_jsonable, f, ensure_ascii=False, indent=2)
 
     return data
 
