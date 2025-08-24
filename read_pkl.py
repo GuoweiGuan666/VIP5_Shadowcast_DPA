@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-read_pkl.py - Load and preview multiple pickle files.
+read_pkl.py - Load and inspect pickle files.
 
     
 Example:
@@ -10,7 +10,8 @@ For each file this tool prints a rich summary of the loaded object, attempting
 to reveal container sizes, sample elements, NumPy array shapes, pandas table
 previews and more. If the object resembles experiment splits (dict with
 train/val/test), record counts and a sample of the ``test`` split are shown in
-detail.
+detail.  For generic dictionaries, value type counts and basic path existence
+information for string values are also reported to help data inspection.
 
 """
 import argparse
@@ -59,6 +60,33 @@ def preview_data(data: Any, depth: int = 0, max_items: int = 10) -> None:
 
     if isinstance(data, dict):
         print(f"{indent}Dict with {len(data)} keys")
+        # Summarise value types and basic path statistics for strings
+        type_counts = {}
+        str_exists = str_missing = 0
+        all_hashable = True
+        for v in data.values():
+            t = type(v).__name__
+            type_counts[t] = type_counts.get(t, 0) + 1
+            if isinstance(v, str):
+                if os.path.exists(v):
+                    str_exists += 1
+                else:
+                    str_missing += 1
+            try:
+                hash(v)
+            except TypeError:
+                all_hashable = False
+        if type_counts:
+            summary = ", ".join(f"{k}={v}" for k, v in type_counts.items())
+            print(f"{indent}Value types: {summary}")
+        if str_exists or str_missing:
+            print(
+                f"{indent}String paths: {str_exists} existing, {str_missing} missing"
+            )
+        if all_hashable:
+            dup = len(data) - len(set(data.values()))
+            if dup:
+                print(f"{indent}{dup} duplicate value(s)")
         for i, (k, v) in enumerate(data.items()):
             if i >= max_items:
                 print(f"{indent}  ... ({len(data) - max_items} more keys)")
@@ -94,6 +122,11 @@ def preview_data(data: Any, depth: int = 0, max_items: int = 10) -> None:
             print(f"{indent}Series shape={data.shape}")
             print(indent + data.head(max_items).to_string())
             return
+        
+    if isinstance(data, str):
+        suffix = " [exists]" if os.path.exists(data) else ""
+        print(f"{indent}{data}{suffix}")
+        return
 
     # Fallback: pretty-print representation
     text = pformat(data, width=80, compact=True)
