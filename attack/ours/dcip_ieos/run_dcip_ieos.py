@@ -187,6 +187,16 @@ def parse_args() -> argparse.Namespace:
         help="Proportion of text tokens kept in the cross-modal mask.",
     )
     parser.add_argument(
+        "--feat-root",
+        default=None,
+        help="Root directory with pre-computed image feature .npy files.",
+    )
+    parser.add_argument(
+        "--feat-backbone",
+        default=None,
+        help="Subdirectory under --feat-root selecting the feature backbone (e.g. 'vitb32_features').",
+    )
+    parser.add_argument(
         "--min-vis-tokens",
         type=int,
         default=2,
@@ -564,6 +574,9 @@ def main() -> None:
             min_keywords=args.min_keywords,
             allow_missing_image=args.allow_missing_image,
             allow_missing_text=args.allow_missing_text,
+            feat_root=args.feat_root,
+            feat_backbone=args.feat_backbone,
+            min_vis_tokens=args.min_vis_tokens,
         )
         pool_dict = data.get("pool", {})
         raw_items = data.get("raw_items", {})

@@ -435,6 +435,9 @@ def build_competition_pool(
     min_keywords: int = 5,
     allow_missing_image: bool = True,
     allow_missing_text: bool = True,
+    feat_root: Optional[str] = None,
+    feat_backbone: Optional[str] = None,
+    min_vis_tokens: int = 2,
 ) -> Dict[str, Any]:
     """Build and cache the competition pool for a dataset.
 
@@ -619,6 +622,21 @@ def build_competition_pool(
                 "category_ids": np.zeros(1, dtype=int),
             }
         
+    feat_dir = None
+    if feat_root and feat_backbone:
+        feat_dir = os.path.join(feat_root, feat_backbone, dataset)
+
+    def _ensure_tokens(arr: np.ndarray) -> np.ndarray:
+        arr = np.asarray(arr, dtype=float)
+        if arr.ndim == 1:
+            arr = np.tile(arr[None, :], (min_vis_tokens, 1))
+        else:
+            arr = arr.reshape(arr.shape[0], -1)
+            if arr.shape[0] < min_vis_tokens:
+                reps = int(np.ceil(min_vis_tokens / arr.shape[0]))
+                arr = np.tile(arr, (reps, 1))[:min_vis_tokens]
+        return arr
+        
     # Preload image feature dictionaries used as fallbacks when the item loader
     # fails to supply ``image_input``.  We try the main mapping first followed by
     # any shadowcast variations under ``poisoned``.
@@ -647,7 +665,7 @@ def build_competition_pool(
             logging.warning("Failed to load image feature dict %s: %s", path, e)
 
     
-    def get_image_vec(asin: str) -> tuple[np.ndarray, bool, bool]:
+    def get_image_vec(asin: str, item_id: Optional[str] = None) -> tuple[np.ndarray, bool, bool]:
         """Return image array for ``asin``.
 
         Returns a tuple of ``(array, synthetic, from_path)`` where ``array`` is
@@ -656,6 +674,23 @@ def build_competition_pool(
 
         nonlocal img_feat_dim
         key = asin.upper()
+
+        # try to load pre-computed feature
+        if feat_dir is not None:
+            candidates = [asin, asin.upper(), asin.lower()]
+            if item_id is not None:
+                candidates.extend([str(item_id), str(item_id).upper(), str(item_id).lower()])
+            for cand in candidates:
+                path = os.path.join(feat_dir, f"{cand}.npy")
+                if os.path.isfile(path):
+                    try:
+                        arr = np.load(path).astype("float32")
+                        arr = _ensure_tokens(arr)
+                        img_feat_dim = arr.shape[1] if arr.ndim == 2 else arr.shape[0]
+                        return arr, False, False
+                    except Exception as e:
+                        logging.warning("[ImageFeat] failed to load %s: %s", path, e)
+
         vec = img_features.get(key)
         if vec is None and asin2id:
             idx = asin2id.get(key) or asin2id.get(key.lower())
@@ -695,10 +730,16 @@ def build_competition_pool(
         if vec is None:
             if allow_missing_image:
                 logging.warning("[ImageFeat] synth zero vector for %s", key)
+                if feat_dir is not None:
+                    dim = img_feat_dim or 512
+                    return np.zeros((min_vis_tokens, dim), dtype=float), True, False
                 return np.zeros((img_feat_dim or 512,), dtype=float), True, False
             raise KeyError(f"image feat not found: {key}")
         
         logging.warning("[ImageFeat] invalid feature type for %s; using zeros", key)
+        if feat_dir is not None:
+            dim = img_feat_dim or 512
+            return np.zeros((min_vis_tokens, dim), dtype=float), True, False
         return np.zeros((img_feat_dim or 512,), dtype=float), True, False
 
     fused_high: List[np.ndarray] = []
@@ -714,7 +755,7 @@ def build_competition_pool(
         from_path = False
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            img_in, synth, from_path = get_image_vec(asin)
+            img_in, synth, from_path = get_image_vec(asin, item_id)
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -793,7 +834,7 @@ def build_competition_pool(
         from_path = False
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
-            img_in, synth, from_path = get_image_vec(asin)
+            img_in, synth, from_path = get_image_vec(asin, item_id)
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -985,10 +1026,10 @@ def build_competition_pool(
     items_meta: Dict[str, Dict[str, Any]] = {}
 
     for asin in high_pop_asins + target_asins:
-        idx_str = asin
+        idx_str = asin2id.get(asin.upper(), asin)
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
-        vec, synth, _ = get_image_vec(asin)
+        vec, synth, _ = get_image_vec(asin, idx_str)
         if synth:
             npy_candidates = [
                 os.path.join(dataset_dir, f"{asin}.npy"),
