@@ -665,7 +665,9 @@ def build_competition_pool(
             logging.warning("Failed to load image feature dict %s: %s", path, e)
 
     
-    def get_image_vec(asin: str, item_id: Optional[str] = None) -> tuple[np.ndarray, bool, bool]:
+    def get_image_vec(
+        asin: str, item_id: Optional[str] = None
+    ) -> tuple[Optional[np.ndarray], bool, bool]:
         """Return image array for ``asin``.
 
         Returns a tuple of ``(array, synthetic, from_path)`` where ``array`` is
@@ -720,27 +722,17 @@ def build_competition_pool(
                 return arr, False, True
             except Exception as e:
                 logging.warning("[ImageFeat] failed to load %s: %s", abs_path, e)
-                if img_feat_dim == 0:
-                    img_feat_dim = 512
-                return np.zeros((img_feat_dim,), dtype=float), True, True
+                return None, True, True
         
         if isinstance(vec, (list, tuple, np.ndarray)):
-            arr = np.asarray(vec, dtype=float)
+            arr = _ensure_tokens(vec)
             return arr.copy(), False, False
         if vec is None:
-            if allow_missing_image:
-                logging.warning("[ImageFeat] synth zero vector for %s", key)
-                if feat_dir is not None:
-                    dim = img_feat_dim or 512
-                    return np.zeros((min_vis_tokens, dim), dtype=float), True, False
-                return np.zeros((img_feat_dim or 512,), dtype=float), True, False
-            raise KeyError(f"image feat not found: {key}")
-        
-        logging.warning("[ImageFeat] invalid feature type for %s; using zeros", key)
-        if feat_dir is not None:
-            dim = img_feat_dim or 512
-            return np.zeros((min_vis_tokens, dim), dtype=float), True, False
-        return np.zeros((img_feat_dim or 512,), dtype=float), True, False
+            logging.warning("[ImageFeat] missing image feat for %s", key)
+            return None, True, False
+
+        logging.warning("[ImageFeat] invalid feature type for %s", key)
+        return None, True, False
 
     fused_high: List[np.ndarray] = []
     texts: List[str] = []
@@ -756,6 +748,9 @@ def build_competition_pool(
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
             img_in, synth, from_path = get_image_vec(asin, item_id)
+            if img_in is None:
+                logging.warning("Skipping item %s due to missing image", item_id)
+                continue
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -835,6 +830,9 @@ def build_competition_pool(
         img_in = np.asarray(item.get("image_input", []), dtype=float)
         if img_in.size == 0:
             img_in, synth, from_path = get_image_vec(asin, item_id)
+            if img_in is None:
+                logging.warning("Skipping target %s due to missing image", item_id)
+                continue
             if synth:
                 synth_img_count += 1
         txt_in = np.asarray(item.get("text_input", np.zeros(1, dtype=float)), dtype=float)
@@ -1030,6 +1028,8 @@ def build_competition_pool(
         title = meta_titles.get(asin) or review_texts.get(asin) or review_texts.get(idx_str) or ""
 
         vec, synth, _ = get_image_vec(asin, idx_str)
+        if vec is None:
+            continue
         if synth:
             npy_candidates = [
                 os.path.join(dataset_dir, f"{asin}.npy"),
@@ -1048,7 +1048,7 @@ def build_competition_pool(
                     except Exception:  # pragma: no cover - invalid npy
                         vec = None
         if vec is None:
-            vec = np.zeros((img_feat_dim or 512,), dtype=float)
+            continue
         items_meta[asin] = {"title": title, "image_feat": vec.tolist()}
 
     # ------------------------------------------------------------------
